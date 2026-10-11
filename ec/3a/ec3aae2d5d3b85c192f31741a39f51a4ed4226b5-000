@@ -1,0 +1,31 @@
+# 11 October 2026 : proof that the incremental build gives the same image as a full rebuild, including after a rejected trial.
+# FR : preuve que la construction incrémentale rend la même image qu'une reconstruction complète.
+import json
+import os
+import sys
+import time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import numpy as np
+from RefLib import load_gray
+import Execute as EX
+
+ROOT = EX.ROOT
+out = os.path.join(ROOT, "checks", "incremental")
+os.makedirs(out, exist_ok=True)
+R = json.load(open(os.path.join(ROOT, "versions/final/CeramicWallTiles_L2c/recipe_current.json")))
+lat = {"type": "lattice", "cx": 4, "cy": 4}
+for n in ("/obj/ZRH_IncTest", "/obj/ZRH_IncTest_full"):
+    EX.Run.hom(f"import hou\nn = hou.node('{n}')\nif n: n.destroy()\nresult = 1")
+T = {}
+def b(net, rec, tag):
+    t = time.time()
+    r = EX.build_final(net, [lat] + rec, os.path.join(out, tag + ".png"))
+    T[tag] = (round(time.time() - t, 2), (r.get("result") or {}))
+    return load_gray(os.path.join(out, tag + ".png"))
+b("/obj/ZRH_IncTest", R[:8], "a8")
+wrong = dict(R[8]); wrong["weight"] = 0.37
+b("/obj/ZRH_IncTest", R[:8] + [wrong], "a9_rejected")
+inc = b("/obj/ZRH_IncTest", R[:10], "a10_incremental")
+full = b("/obj/ZRH_IncTest_full", R[:10], "b10_full")
+d = float(np.abs(inc - full).max())
+print(json.dumps({"max_abs_diff": d, "identical": d < 1e-6, "timings": T}, indent=1, default=str))

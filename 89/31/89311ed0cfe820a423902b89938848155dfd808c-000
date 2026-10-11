@@ -1,0 +1,429 @@
+# 11 October 2026 : build a height recipe (ordered list of layers) as a real Copernicus graph, one network box per layer.
+# Executed inside Houdini (live session) through the bridge. Python builds and tidies; the nodes carry the form.
+# FR : construit une recette de height (liste ordonnée de couches) en graphe Copernicus, une boîte réseau par couche.
+import json
+import os
+import hou
+
+_HERE = "/Users/zenray/.claude/tmp/tmp-zenray-height/Scripts"
+_G = {}
+exec(open(os.path.join(_HERE, "ZrhCop.py")).read(), _G)
+node, lin, curve, mix, scale, const, coords, box_distance = (_G[k] for k in ("node", "lin", "curve", "mix", "scale", "const", "coords", "box_distance"))
+tile_index, table_by_row, export, box, ramp, smooth = (_G[k] for k in ("tile_index", "table_by_row", "export", "box", "ramp", "smooth"))
+LINEAR, SMOOTH, CONSTANT = _G["LINEAR"], _G["SMOOTH"], _G["CONSTANT"]
+
+DATA_OBJ = "/obj/ZRH_Data"
+_SF = {}
+exec(open(os.path.join(_HERE, "StashFast.py")).read(), _SF)
+PHASE_COLORS = [(0.25, 0.35, 0.5), (0.3, 0.45, 0.3), (0.5, 0.4, 0.25), (0.45, 0.28, 0.45), (0.3, 0.45, 0.48), (0.48, 0.3, 0.3)]
+
+
+def stash_curves(name, polylines, closed_default=False, amp_key="amp"):
+    """Store measured polylines (canvas units, y up) as geometry in a stash SOP; point Cd carries the amplitude."""
+    data = hou.node(DATA_OBJ) or hou.node("/obj").createNode("geo", DATA_OBJ.split("/")[-1])
+    data.setDisplayFlag(False)
+    geo = hou.Geometry()
+    geo.addAttrib(hou.attribType.Point, "Cd", (0.0, 0.0, 0.0))
+    for pl in polylines:
+        pts = pl["pts"]
+        a = float(pl.get(amp_key, 1.0))
+        ps = geo.createPoints([(x, y, 0.0) for x, y in pts])
+        for p in ps:
+            p.setAttribValue("Cd", (a, a, a))
+        prim = geo.createPolygon(is_closed=bool(pl.get("closed", closed_default)))
+        for p in ps:
+            prim.addVertex(p)
+    # 11 October 2026 : written to a .bgeo.sc file read by a File SOP, like the regions (the hip stays light)
+    os.makedirs(_SF["GEO_DIR"], exist_ok=True)
+    path = os.path.join(_SF["GEO_DIR"], name + ".bgeo.sc")
+    geo.saveToFile(path)
+    st = data.node(name)
+    if st is not None and st.type().name() != "file":
+        st.destroy()
+        st = None
+    st = st or data.createNode("file", name)
+    st.parm("file").set(path)
+    st.parm("reload").pressButton()
+    return st
+
+
+class Builder:
+    def __init__(self, net):
+        self.net = net
+        self.x01, self.y01, self.fx, self.fy = coords(net, "C")
+        self.d, self.dx, self.dy = box_distance(net, self.fx, self.fy, "D")
+        self.col, self.row = tile_index(net, self.x01, self.y01, "I")
+        self.size = const(net, "C_size", 0.0)
+        self.base_nodes = [self.x01, self.y01, self.fx, self.fy, self.d, self.dx, self.dy, self.col, self.row, self.size]
+        self.acc = None
+        self.k = 0
+        self._fades = {}
+
+    def _accumulate(self, layer, op, nodes):
+        if op == "base" or self.acc is None:
+            self.acc = layer
+        else:
+            self.acc = mix(self.net, f"L{self.k:02d}_acc", self.acc, layer, "add")
+            nodes.append(self.acc)
+        return self.acc
+
+    def _fade(self, layer, fade, p, nodes):
+        # 11 October 2026 : a per tile layer changes value on the joint centre line; fading it to zero there removes the step (tiling seam)
+        key = round(fade, 6)
+        w = self._fades.get(key)
+        if w is None:
+            w = smooth(self.net, f"F_fade_{len(self._fades):02d}", self.d, 0.0, fade, 0.0, 1.0)
+            self._fades[key] = w
+            nodes.append(w)
+        out = mix(self.net, p + "fade", layer, w, "multiply")
+        nodes.append(out)
+        return out
+
+    # ---------- layer types ----------
+    def joint_profile(self, L, p, nodes):
+        # 11 October 2026 : keys are normalised into the ramp and rescaled by the remap, so relative (negative) profiles work
+        keys = [tuple(x) for x in L["keys"]]
+        lo = min(v for _, v in keys)
+        hi = max(v for _, v in keys)
+        span = (hi - lo) or 1e-6
+        n = curve(self.net, p + "profile", self.d, [(x, (v - lo) / span) for x, v in keys], 0.5, lo, hi, LINEAR)
+        nodes.append(n)
+        return n
+
+    def row_table(self, L, p, nodes):
+        # 11 October 2026 : COP row id grows upward (1.0 = top row), measured tables are top-down, so reverse them
+        n = table_by_row(self.net, p + "rowtable", self.row, list(L["values"])[::-1])
+        nodes.append(n)
+        return n
+
+    def row_plane(self, L, p, nodes):
+        a = table_by_row(self.net, p + "a", self.row, list(L["a"])[::-1])
+        b = table_by_row(self.net, p + "b", self.row, list(L["b"])[::-1])
+        u = lin(self.net, p + "u", self.fx, 0.0, 1.0, -0.5, 0.5, method=2)
+        v = lin(self.net, p + "v", self.fy, 0.0, 1.0, 0.5, -0.5, method=2)  # image rows grow downward
+        au = mix(self.net, p + "au", u, a, "multiply")
+        bv = mix(self.net, p + "bv", v, b, "multiply")
+        s = mix(self.net, p + "sum", au, bv, "add")
+        nodes += [a, b, u, v, au, bv, s]
+        return s
+
+    def noise(self, L, p, nodes):
+        n = node(self.net, "fractalnoise", p + "noise", (), signature="f1")
+        n.parm("noisetype").set(L.get("noisetype", 0))
+        n.parm("amp").set(L["amp"])
+        n.parm("center").set(float(L.get("center", 0.0)))
+        n.parm("elementsize").set(L["elementsize"])
+        n.parmTuple("elementscale").set(tuple(L.get("elementscale", [1.0, 1.0])))
+        n.parmTuple("off").set(tuple(L.get("offset", [0.0, 0.0])))
+        n.parmTuple("tilesize").set((2.0, 2.0))
+        n.parm("oct").set(L.get("oct", 8.0))
+        n.parm("rough").set(L.get("rough", 0.5))
+        n.parm("fractaltype").set(L.get("fractaltype", 1))
+        n.parm("dotiled").set(1)
+        nodes.append(n)
+        return n
+
+    def contours(self, L, p, nodes):
+        """Iso-level shapes of a measured low-frequency field: one soft mask per level, weighted by the level step."""
+        acc = None
+        for j, lev in enumerate(L["levels"]):
+            st = stash_curves(f"{L['tag']}_lev{j:02d}", lev["curves"], closed_default=True)
+            si = node(self.net, "sopimport", p + f"si{j:02d}", (), usesoppath=1, soppath=st.path())
+            mk = node(self.net, "maskfromcurves", p + f"mask{j:02d}", [self.size, si])
+            bl = node(self.net, "blur", p + f"soft{j:02d}", [mk], units=1, size_pixel=float(L.get("soft_px", 6.0)))
+            sc = scale(self.net, p + f"step{j:02d}", bl, float(lev["step"]))
+            nodes += [si, mk, bl, sc]
+            acc = sc if acc is None else mix(self.net, p + f"sum{j:02d}", acc, sc, "add")
+            if acc is not sc:
+                nodes.append(acc)
+        if L.get("bias", 0.0):
+            acc = scale(self.net, p + "bias", acc, 1.0, float(L["bias"]))
+            nodes.append(acc)
+        return acc
+
+    def lines(self, L, p, nodes):
+        st = stash_curves(L["tag"] + "_lines", L["curves"])
+        si = node(self.net, "sopimport", p + "si", (), usesoppath=1, soppath=st.path())
+        lc = node(self.net, "layerfromcurves", p + "curves", [self.size, si])
+        lc.parm("width").set(float(L["width"]))
+        lc.parm("dotiled").set(0)
+        if "profile" in L:
+            lc.parm("profileramp").set(ramp([tuple(x) for x in L["profile"]], 1.0, LINEAR))
+        ce = node(self.net, "channelextract", p + "amp", [(lc, 0)], channel=0)
+        pr = mix(self.net, p + "shaped", ce, (lc, 2), "multiply")
+        sc = scale(self.net, p + "gain", pr, float(L.get("gain", 1.0)))
+        nodes += [si, lc, ce, pr, sc]
+        return sc
+
+    def shapes(self, L, p, nodes):
+        st = stash_curves(L["tag"] + "_shapes", L["curves"], closed_default=True)
+        si = node(self.net, "sopimport", p + "si", (), usesoppath=1, soppath=st.path())
+        rz = node(self.net, "rasterizegeo", p + "raster", [self.size, si])
+        rz.parm("name1").set("Cd")
+        ce = node(self.net, "channelextract", p + "amp", [rz], channel=0)
+        bl = node(self.net, "blur", p + "soft", [ce], units=1, size_pixel=float(L.get("soft_px", 1.5)))
+        nodes += [si, rz, ce, bl]
+        return bl
+
+    def regions(self, L, p, nodes):
+        """Posterised regions: closed polygons with their value (point Cd) and depth z, rasterised nearest-first, then softened."""
+        st = _SF["stash_polys"](DATA_OBJ, L["tag"] + "_regions", L["polys"], "val")
+        si = node(self.net, "sopimport", p + "si", (), usesoppath=1, soppath=st.path())
+        rz = node(self.net, "rasterizegeo", p + "raster", [self.size, si], depthmode=0)
+        rz.parm("name1").set("Cd")
+        ce = node(self.net, "channelextract", p + "val", [rz], channel=0)
+        bl = node(self.net, "blur", p + "soft", [ce], units=1, size_pixel=float(L.get("soft_px", 12.0)))
+        nodes += [si, rz, ce, bl]
+        return bl
+
+    def side_profiles(self, L, p, nodes):
+        """Four additive curves against the distance to each tile side (image orientation, COP fy grows upward)."""
+        dist = {"left": self.fx, "right": lin(self.net, p + "dr", self.fx, 0.0, 1.0, 1.0, 0.0),
+                "top": lin(self.net, p + "dt", self.fy, 0.0, 1.0, 1.0, 0.0), "bottom": self.fy}
+        nodes += [dist["right"], dist["top"]]
+        acc = None
+        for k in ("left", "right", "top", "bottom"):
+            keys = [tuple(x) for x in L["profiles"][k]]
+            lo = min(v for _, v in keys)
+            hi = max(v for _, v in keys)
+            span = (hi - lo) or 1e-6
+            rng = keys[-1][0]
+            n = node(self.net, "remap", p + k, [dist[k]], inputmin=0.0, inputmax=rng, outputmin=lo, outputmax=lo + span, useramp=1, method=0)
+            n.parm("ramp").set(ramp([(x / rng, (v - lo) / span) for x, v in keys], 1.0, LINEAR))
+            nodes.append(n)
+            acc = n if acc is None else mix(self.net, p + "sum_" + k, acc, n, "add")
+            if acc is not n:
+                nodes.append(acc)
+        return acc
+
+    def corners(self, L, p, nodes):
+        """Bilinear field per tile row from 4 measured corner values (image orientation: v grows downward)."""
+        u = self.fx
+        v = lin(self.net, p + "v", self.fy, 0.0, 1.0, 1.0, 0.0)
+        iu = lin(self.net, p + "iu", u, 0.0, 1.0, 1.0, 0.0)
+        iv = lin(self.net, p + "iv", v, 0.0, 1.0, 1.0, 0.0)
+        nodes += [v, iu, iv]
+        weights = [(iu, iv), (u, iv), (iu, v), (u, v)]
+        acc = None
+        for k in range(4):
+            tab = table_by_row(self.net, p + f"c{k}", self.row, [row[k] for row in L["c"]][::-1])
+            w = mix(self.net, p + f"w{k}", weights[k][0], weights[k][1], "multiply")
+            t = mix(self.net, p + f"t{k}", w, tab, "multiply")
+            nodes += [tab, w, t]
+            acc = t if acc is None else mix(self.net, p + f"s{k}", acc, t, "add")
+            if acc is not t:
+                nodes.append(acc)
+        return acc
+
+    def noise_mask(self, L, p, nodes):
+        """Thresholded noise (statistical shapes with a measured coverage), scaled by a measured amplitude."""
+        n = self.noise(dict(L, amp=L.get("namp", 0.2), center=0.5), p, nodes)
+        if L.get("fold"):
+            n.parm("post_dofold").set(1)
+        t, w = float(L["threshold"]), float(L.get("soft", 0.01))
+        m = node(self.net, "remap", p + "thr", [n], inputmin=t - w, inputmax=t + w, outputmin=0.0, outputmax=1.0, useramp=1, method=0)
+        m.parm("ramp").set(ramp(_G["SMOOTHSTEP"]))
+        sc = scale(self.net, p + "amp", m, float(L["amp"]))
+        nodes += [m, sc]
+        return sc
+
+    def streaks(self, L, p, nodes):
+        n = self.noise(dict(L, center=0.0), p, nodes)
+        sb = node(self.net, "streakblur", p + "streak", [n], units=1, length_pixels=float(L.get("length_px", 40.0)))
+        sb.parm("dirtype").set(0)
+        sb.parm("angle").set(float(L.get("angle", 90.0)))
+        sc = scale(self.net, p + "gain", sb, float(L.get("gain", 1.0)))
+        nodes += [sb, sc]
+        return sc
+
+    def const(self, L, p, nodes):
+        n = const(self.net, p + "value", float(L["value"]))
+        nodes.append(n)
+        return n
+
+    def color_regions(self, L, p, nodes):
+        """Base colour regions: closed polygons carrying their measured RGB (point Cd), rasterised nearest first, softened."""
+        st = _SF["stash_polys"](DATA_OBJ, L["tag"] + "_colors", L["polys"], rgb=True)
+        si = node(self.net, "sopimport", p + "si", (), usesoppath=1, soppath=st.path())
+        rz = node(self.net, "rasterizegeo", p + "raster", [self.size, si], depthmode=0)
+        rz.parm("name1").set("Cd")
+        rz.parm("outtype1").set(2)
+        out = rz
+        if self.acc is not None:
+            # 11 October 2026 : pixels no polygon covers stay black; composite the regions over the previous colour by coverage
+            ce = node(self.net, "channelextract", p + "cov_b", [rz], channel=2)
+            cov = lin(self.net, p + "cov", ce, 0.0, 0.02, 0.0, 1.0)
+            out = mix(self.net, p + "over", self.acc, rz, "blend", cov)
+            nodes += [ce, cov, out]
+        bl = node(self.net, "blur", p + "soft", [out], units=1, size_pixel=float(L.get("soft_px", 1.0)))
+        nodes += [si, rz, bl]
+        return bl
+
+    def const_rgb(self, L, p, nodes):
+        n = node(self.net, "constant", p + "rgb", (), signature="f3")
+        n.parmTuple("f3").set(tuple(float(x) for x in L["rgb"]))
+        nodes.append(n)
+        return n
+
+    def joint_color(self, L, p, nodes):
+        """Colour the joints from the height structure: a smooth mask on the joint distance, blended over the current colour."""
+        w, soft = float(L["width"]), float(L.get("soft", 0.004))
+        m = node(self.net, "remap", p + "mask", [self.d], inputmin=w - soft, inputmax=w + soft, outputmin=1.0, outputmax=0.0, useramp=1, method=0)
+        m.parm("ramp").set(ramp(_G["SMOOTHSTEP"]))
+        col = node(self.net, "constant", p + "rgb", (), signature="f3")
+        col.parmTuple("f3").set(tuple(float(x) for x in L["rgb"]))
+        out = mix(self.net, p + "over", self.acc, col, "blend", m)
+        nodes += [m, col, out]
+        return out
+
+    def eq(self, L, p, nodes):
+        """11 October 2026 : measured frequency equaliser. out = acc + sum_i w_i * (acc - blur_i(acc)), written as
+        (1 + sum w) * acc - sum w_i * blur_i(acc) with Scale and Add only; the layer border is set to wrap first so the blurs
+        stay tileable. Weights come from a least squares fit at full resolution. FR : égaliseur de fréquences mesuré."""
+        lp = node(self.net, "layerproperties", p + "wrap", [self.acc])
+        lp.parm("setborder").set(1)
+        lp.parm("border").set(3)
+        nodes.append(lp)
+        out = scale(self.net, p + "base", lp, 1.0 + float(sum(L["weights"])))
+        nodes.append(out)
+        for i, (R, w) in enumerate(zip(L["radii"], L["weights"])):
+            b = node(self.net, "blur", p + f"blur{i}", [lp], units=1, size_pixel=float(R))
+            sb = scale(self.net, p + f"gain{i}", b, -float(w))
+            out = mix(self.net, p + f"sum{i}", out, sb, "add")
+            nodes += [b, sb, out]
+        return out
+
+    def seam(self, L, p, nodes):
+        """11 October 2026 : make the result tileable. A Transform 2D with Wrap border shifts the image by whole cells (the
+        lattice stays aligned); near the canvas borders the image is cross-faded with that shifted copy, whose borders are
+        interior content, so the two edges meet without a seam. FR : raccord par fondu avec la copie décalée en enroulement."""
+        sx, sy, w = float(L.get("shift_x", 0.0)), float(L.get("shift_y", 0.0)), float(L["width"])
+        xf = node(self.net, "xform2d", p + "shift", [self.acc])
+        xf.parm("units").set(1)
+        xf.parmTuple("t_texture").set((sx, sy))
+        xf.parm("border").set(4)
+        xf.parm("filter").set(0)
+        masks = []
+        for axis, shift, src in (("x", sx, self.x01), ("y", sy, self.y01)):
+            if shift == 0.0:
+                continue
+            inv = lin(self.net, p + "inv_" + axis, src, 0.0, 1.0, 1.0, 0.0)
+            dist = mix(self.net, p + "dist_" + axis, src, inv, "min")
+            m = smooth(self.net, p + "mask_" + axis, dist, 0.0, w, 1.0, 0.0)
+            nodes += [inv, dist, m]
+            masks.append(m)
+        mask = masks[0] if len(masks) == 1 else mix(self.net, p + "mask", masks[0], masks[1], "max")
+        if len(masks) > 1:
+            nodes.append(mask)
+        out = mix(self.net, p + "over", self.acc, xf, "blend", mask)
+        nodes += [xf, out]
+        return out
+
+    def hist(self, L, p, nodes):
+        keys = [tuple(x) for x in L["keys"]]
+        lo, hi = keys[0][0], keys[-1][0]
+        olo, ohi = min(k[1] for k in keys), max(k[1] for k in keys)
+        n = node(self.net, "remap", p + "hist", [self.acc], inputmin=lo, inputmax=hi, outputmin=olo, outputmax=ohi, useramp=1, method=0)
+        n.parm("ramp").set(ramp([((x - lo) / (hi - lo), (y - olo) / (ohi - olo)) for x, y in keys], 1.0, LINEAR))
+        nodes.append(n)
+        return n
+
+    def add_layer(self, L):
+        self.k += 1
+        p = f"L{self.k:02d}_{L['type']}_"
+        nodes = []
+        fn = getattr(self, L["type"])
+        layer = fn(L, p, nodes)
+        if L.get("weight", 1.0) != 1.0:
+            layer = scale(self.net, p + "w", layer, float(L["weight"]))
+            nodes.append(layer)
+        if L.get("fade"):
+            layer = self._fade(layer, float(L["fade"]), p, nodes)
+        op = L.get("op", "add")
+        if L["type"] in ("hist", "seam", "eq"):
+            self.acc = layer
+        else:
+            self._accumulate(layer, op, nodes)
+        box(self.net, f"L{self.k:02d} {L['type']} {L.get('note', '')}".strip(), nodes, PHASE_COLORS[(self.k - 1) % len(PHASE_COLORS)])
+        return self.acc
+
+
+def build(net_path, recipe, out_png=None, res=2048, bits=16):
+    """(Re)build net_path from scratch with every layer of the recipe; export the final sum if out_png is given."""
+    parent_path, name = net_path.rsplit("/", 1)
+    parent = hou.node(parent_path)
+    net = parent.node(name)
+    if net is not None and parent.childTypeCategory() == hou.objNodeTypeCategory() and net.type().name() != "copnet":
+        net.destroy()
+        net = None
+    if net is None:
+        kind = "copnet" if parent.childTypeCategory() == hou.objNodeTypeCategory() else "subnet"
+        net = parent.createNode(kind, name)
+    # 11 October 2026 : incremental build. Each layer has a signature; the layers whose signatures still prefix the new recipe
+    # are kept as they are, the rest is deleted, and only the new layers are created (a full rebuild took 80 s per trial).
+    # FR : construction incrémentale ; seules les couches nouvelles sont créées, les autres sont gardées telles quelles.
+    import hashlib
+    import re
+    import time as _time
+    t0 = _time.time()
+    sigs = [L.get("sig") or hashlib.md5(json.dumps(L, sort_keys=True).encode()).hexdigest() for L in recipe]
+    old = json.loads(net.userData("zrh_sigs") or "[]")
+    keep = 0
+    while keep < min(len(old), len(sigs)) and old[keep] == sigs[keep]:
+        keep += 1
+    if keep == 0:
+        for c in net.children():
+            c.destroy()
+        for b in net.networkBoxes():
+            b.destroy()
+    # an optional first item {"type": "lattice", "cx": .., "cy": ..} sets the cells of the reference lattice
+    cells = (4, 4)
+    body = recipe
+    if recipe and recipe[0].get("type") == "lattice":
+        cells = (int(recipe[0]["cx"]), int(recipe[0]["cy"]))
+        body = recipe[1:]
+    off = 1 if body is not recipe else 0
+    kept_layers = max(0, keep - off)
+    if keep > 0:
+        for c in list(net.children()):
+            mt = re.match(r"^L(\d+)_", c.name())
+            if mt and int(mt.group(1)) > kept_layers:
+                c.destroy()
+        for b in list(net.networkBoxes()):
+            mt = re.match(r"^L(\d+)_", b.name())
+            if mt and int(mt.group(1)) > kept_layers:
+                b.destroy()
+    _G["P"]["cells"] = cells
+    B = Builder(net)
+    box(net, "Coordinates (tile grid 4 x 4)", B.base_nodes, (0.2, 0.2, 0.2))
+    if kept_layers > 0:
+        B.k = kept_layers
+        accs = json.loads(net.userData("zrh_accs") or "[]")
+        B.acc = net.node(accs[kept_layers - 1])
+        for L in body[:kept_layers]:
+            if L.get("fade"):
+                B._fades[round(float(L["fade"]), 6)] = net.node("F_fade_00")
+    accs = json.loads(net.userData("zrh_accs") or "[]")[:kept_layers]
+    for L in body[kept_layers:]:
+        if "payload" in L:
+            L = dict(L)
+            L[L["payload_key"]] = json.load(open(L["payload"]))[L["payload_key"]]
+        B.add_layer(L)
+        accs.append(B.acc.name())
+    t_nodes = _time.time() - t0
+    net.setUserData("zrh_sigs", json.dumps(sigs))
+    net.setUserData("zrh_accs", json.dumps(accs))
+    out = node(net, "null", "OUT_height", [B.acc])
+    out.setDisplayFlag(True)
+    try:
+        net.layoutChildren()
+    except Exception:
+        pass
+    res_info = {"nodes": len(net.children()), "kept_layers": kept_layers, "new_layers": len(body) - kept_layers, "t_nodes": round(t_nodes, 2)}
+    if out_png:
+        t1 = _time.time()
+        export(net, out, out_png, res, bits)
+        res_info["t_cook_export"] = round(_time.time() - t1, 2)
+        res_info["exported"] = os.path.exists(out_png)
+    res_info["errors"] = [n.name() + ": " + "; ".join(n.errors()) for n in net.children() if n.errors()]
+    return res_info

@@ -1,0 +1,220 @@
+# 11 October 2026 : execute the retained method on one reference, ONE LAYER AT A TIME, in a dedicated copnet of the open scene.
+# Each candidate layer is built for real, measured, and kept only if it pays (score gain); every accepted layer leaves an image,
+# a panel, its gates and a log line. The plan order is the method (structure, measured shapes coarse to fine, statistics, histogram).
+# FR : exécute la méthode retenue couche par couche ; une couche n'est gardée que si elle paie ; chaque couche laisse une image.
+import json
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import numpy as np
+from PIL import Image
+from RefLib import load_gray
+import Run
+import Measure as M
+import Methods as MM
+import Fit as F
+
+ROOT = Run.ROOT
+
+
+_PAYLOAD_HASH = {}
+
+
+def light_recipe(recipe, payload_dir):
+    """11 October 2026 : heavy layer data (polys, curves) is written once to payload_dir/<hash>.json and replaced by a reference;
+    each layer gets a signature so the incremental build in Houdini keeps every unchanged layer. FR : recette légère."""
+    import hashlib
+    os.makedirs(payload_dir, exist_ok=True)
+    out = []
+    for L in recipe:
+        key = "polys" if "polys" in L else ("curves" if "curves" in L else None)
+        if key is None:
+            M2 = dict(L)
+        else:
+            data = L[key]
+            h = _PAYLOAD_HASH.get(id(data))
+            if h is None:
+                h = hashlib.md5(json.dumps(data).encode()).hexdigest()
+                _PAYLOAD_HASH[id(data)] = h
+                path = os.path.join(payload_dir, h + ".json")
+                if not os.path.exists(path):
+                    json.dump({key: data}, open(path, "w"))
+            M2 = {k: v for k, v in L.items() if k != key}
+            M2["payload"] = os.path.join(payload_dir, h + ".json")
+            M2["payload_key"] = key
+        M2.pop("sig", None)
+        M2["sig"] = hashlib.md5(json.dumps(M2, sort_keys=True).encode()).hexdigest()
+        out.append(M2)
+    return out
+
+
+def build_final(net_path, recipe, png, res=2048):
+    png = os.path.abspath(png)  # 11 October 2026 : Houdini runs in another working directory; a relative path is not found
+    rp = png.replace(".png", "_recipe.json")
+    json.dump(light_recipe(recipe, os.path.join(os.path.dirname(png), "payloads")), open(rp, "w"))
+    code = (
+        "import hou, json\n"
+        "g = {}\n"
+        f"exec(open('{ROOT}/Scripts/Recipe.py').read(), g)\n"
+        f"recipe = json.load(open('{rp}'))\n"
+        f"result = g['build']('{net_path}', recipe, '{png}', {res})\n"
+    )
+    return Run.hom(code)
+
+
+STATISTICAL = {"grain", "grain_fine", "streaks"}
+FADED = {"side_profiles", "row_table", "row_plane", "corners"}
+
+
+def local_gate(cand, prev, r, v, thr=0.01, need=0.97):
+    """11 October 2026 : error on the changed pixels must drop by at least 3 percent; also returns the least squares gain."""
+    add = cand - prev
+    t = v & (np.abs(add) > thr)
+    if t.sum() < 50:
+        return {"ok": True, "pixels": int(t.sum()), "ls_gain": 1.0}
+    want = (r - prev)[t]
+    before = float(np.abs(want).mean())
+    after = float(np.abs(r - cand)[t].mean())
+    g = float((add[t] * want).sum() / max((add[t] ** 2).sum(), 1e-9))
+    return {"ok": after < before * need, "pixels": int(t.sum()), "before": round(before, 4), "after": round(after, 4), "ls_gain": round(g, 3)}
+
+
+def joint_fade(keys, frac=0.1):
+    """11 October 2026 : distance (cell units) where the measured joint profile reaches its plateau within frac of its height."""
+    ks = [(float(x), float(v)) for x, v in keys]
+    peak = ks[0][1]
+    plateau = float(np.median([v for x, v in ks if 0.05 <= x <= 0.1] or [ks[-1][1]]))
+    for x, v in ks:
+        if abs(v - plateau) <= frac * abs(peak - plateau):
+            return x
+    return 0.02
+
+
+def default_plan():
+    return [
+        ("joint_profile", lambda c: [MM.L_joint(c)]),
+        ("side_profiles", lambda c: [MM.L_sides(c)]),
+        ("row_table", lambda c: [MM.L_rowtable(c)]),
+        ("row_plane", lambda c: [MM.L_rowplane(c)]),
+        ("corners", lambda c: [MM.L_corners(c)]),
+        ("regions_s32", lambda c: [MM.L_regions(c, 32, 8, 512, c["tag"] + "_r32")]),
+        ("regions_s16", lambda c: [MM.L_regions(c, 16, 8, 512, c["tag"] + "_r16")]),
+        ("regions_s8", lambda c: [MM.L_regions(c, 8, 8, 1024, c["tag"] + "_r8")]),
+        ("lines", lambda c: [MM.L_lines(c, c["tag"] + "_ln")]),
+        ("blobs", lambda c: [MM.L_blobs(c, c["tag"] + "_bl")]),
+        ("regions_s4", lambda c: [MM.L_regions(c, 4, 8, 1024, c["tag"] + "_r4")]),
+        ("grain", lambda c: [MM.L_noise(c, 1, 4)]),
+        ("hist", lambda c: [MM.L_hist(c)]),
+    ]
+
+
+def run(name, net_path, ref_png, valid_png, plan=None, min_gain=0.002, out_root=None, cells=None, resume=None):
+    out_root = out_root or os.path.join(ROOT, "versions", "final", name)
+    os.makedirs(out_root, exist_ok=True)
+    r = load_gray(ref_png)
+    v = load_gray(valid_png) > 0.5 if valid_png else np.ones_like(r, bool)
+    if cells is None:
+        import Lattice
+        lat = Lattice.detect(r)
+        cells = (lat["x"]["cells"], lat["y"]["cells"])
+    F.set_lattice(*cells)
+    lattice = {"type": "lattice", "cx": int(cells[0]), "cy": int(cells[1])}
+    recipe, c, best = [], None, -9.0
+    prev_pearson = -1.0
+    if resume:
+        # 11 October 2026 : continue from an existing (light) recipe instead of rebuilding the whole plan
+        prev = json.load(open(os.path.join(resume, "log.json")))
+        cells = tuple(prev.get("cells", cells or (4, 4)))
+        F.set_lattice(*cells)
+        lattice = {"type": "lattice", "cx": int(cells[0]), "cy": int(cells[1])}
+        recipe = [L for L in json.load(open(os.path.join(resume, "recipe_current.json"))) if L.get("type") != "seam"]
+        start_png = os.path.join(out_root, "L00_resume.png")
+        build_final(net_path, [lattice] + recipe, start_png, r.shape[0])
+        c = load_gray(start_png)
+        m0 = M.measure(c, r, v)
+        best, prev_pearson = MM.score(m0), m0["pearson"]
+        print(name, "resume", round(best, 4), Run.summary(m0), flush=True)
+    log = {"name": name, "net": net_path, "reference": ref_png, "layers": [], "cells": list(cells)}
+    k = 0
+    for lname, mk in (plan or default_plan()):
+        t0 = time.time()
+        res = r if c is None else r - c
+        if c is not None:
+            # 11 October 2026 : outside the valid mask the reference carries preparation artefacts (ceramic: bad rows at the
+            # border, double joint and black blocks); a zero residual there leaves those pixels to the measured structure.
+            res = np.where(v, res, 0.0)
+        ctx = {"r": r, "v": v, "res": res, "c": c, "recipe": recipe, "tag": f"{name}_L{k + 1:02d}", "phase": k + 1, "log": {}, "shared": {}}
+        layers = mk(ctx)
+        if lname == "joint_profile" and layers and layers[0].get("keys"):
+            log["fade"] = joint_fade(layers[0]["keys"])
+        if lname in FADED and log.get("fade"):
+            for L in layers:
+                L["fade"] = log["fade"]
+        if lname == "hist" and c is None:
+            continue
+        trial = recipe + layers
+        png = os.path.join(out_root, f"try_{lname}.png")
+        b = build_final(net_path, [lattice] + trial, png, r.shape[0])
+        if not b.get("ok"):
+            log["layers"].append({"layer": lname, "status": "build_error", "error": str(b)[-800:]})
+            continue
+        cand = load_gray(png)
+        local = None
+        if c is not None and lname not in STATISTICAL and lname not in ("hist", "eq"):
+            # 11 October 2026 : local gate. A layer must lower the error on the pixels it changes; otherwise its amplitude is
+            # refitted by least squares on those pixels and the layer is rebuilt once with that weight (traced lines added 0.12
+            # where the reference asked 0.06 and still passed the global score). FR : porte locale, amplitude réajustée une fois.
+            local = local_gate(cand, c, r, v)
+            if not local["ok"] and 0.1 < local["ls_gain"] < 0.95:
+                for L in layers:
+                    L["weight"] = round(float(L.get("weight", 1.0)) * local["ls_gain"], 4)
+                trial = recipe + layers
+                b = build_final(net_path, [lattice] + trial, png, r.shape[0])
+                if b.get("ok"):
+                    cand = load_gray(png)
+                    local = local_gate(cand, c, r, v)
+                    local["refit"] = True
+        m = M.measure(cand, r, v)
+        s = MM.score(m)
+        if lname in STATISTICAL and c is not None:
+            # 11 October 2026 : a correct random layer lowers pixel scores by construction (regression to the mean);
+            # it is accepted when it brings the fine band energies closer to the reference without costing more than 0.01 of r
+            g_new = M.gates(cand, r, v)["G_band_energy_ratio"]
+            g_old = M.gates(c, r, v)["G_band_energy_ratio"]
+            dist = lambda g: sum(abs(np.log(max(g[k], 1e-3))) for k in ("1-2", "2-4"))
+            accepted = dist(g_new) < dist(g_old) * 0.8 and m["pearson"] > prev_pearson - 0.01
+            if accepted:
+                s = max(s, best)
+        else:
+            accepted = ((s > best + min_gain) or c is None) and (local is None or local["ok"])
+        entry_local = local
+        entry = {"local": entry_local, "layer": lname, "status": "accepted" if accepted else "rejected", "score": round(s, 4), "gain": round(s - best, 4) if best > -9 else None,
+                 "summary": Run.summary(m), "note": "; ".join(L.get("note", "") for L in layers), "seconds": round(time.time() - t0, 1),
+                 "nodes": b.get("result", {}).get("nodes"), "timing": {k: (b.get("result") or {}).get(k) for k in ("kept_layers", "new_layers", "t_nodes", "t_cook_export")}}
+        if accepted:
+            k += 1
+            recipe, c, best = trial, cand, s
+            prev_pearson = m["pearson"]
+            final_png = os.path.join(out_root, f"L{k:02d}_{lname}.png")
+            os.replace(png, final_png)
+            M.panel(cand, r, v, final_png.replace(".png", "_panel.png"))
+            entry["image"] = final_png
+            entry["gates"] = M.gates(cand, r, v)
+            json.dump(light_recipe(recipe, os.path.join(out_root, "payloads")), open(os.path.join(out_root, "recipe_current.json"), "w"))
+        else:
+            os.remove(png)
+        log["layers"].append(entry)
+        json.dump(log, open(os.path.join(out_root, "log.json"), "w"), indent=1)
+        print(name, lname, entry["status"], entry["score"], entry["summary"], entry["seconds"], "s", entry["timing"], "local", entry["local"], flush=True)
+    # rebuild the accepted recipe so the live network ends on the retained state
+    build_final(net_path, [lattice] + recipe, os.path.join(out_root, "FINAL_height.png"), r.shape[0])
+    log["cells"] = list(cells)
+    json.dump(log, open(os.path.join(out_root, "log.json"), "w"), indent=1)
+    return log
+
+
+if __name__ == "__main__":
+    name, net_path, ref_png, valid_png = sys.argv[1:5]
+    run(name, net_path, ref_png, valid_png)

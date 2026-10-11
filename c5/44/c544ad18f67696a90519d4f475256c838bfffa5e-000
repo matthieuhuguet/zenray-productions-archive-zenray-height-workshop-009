@@ -1,0 +1,12 @@
+# 11 October 2026 : polygon count and tracing time of a pixel scale pass (sigma 0.5, 16 levels) on a real residual.
+import os, sys, time, json
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import numpy as np
+from RefLib import load_gray
+import Fit as F
+if __name__ == "__main__":
+    r = load_gray(sys.argv[1]); c = load_gray(sys.argv[2]); v = np.ones_like(r, bool)
+    for sigma, K, mp in ((0.5, 16, 6), (0.5, 16, 1)):
+        t = time.time(); L = F.region_layer_fast(r - c, v, sigma=sigma, K=K, work=2048, tag="t", soft_px=0.0, min_px=mp); dt = time.time() - t
+        npts = sum(len(p["pts"]) for p in L["polys"])
+        print(json.dumps({"sigma": sigma, "K": K, "min_px": mp, "polys": len(L["polys"]), "points": npts, "seconds": round(dt, 1), "MB": round(len(json.dumps(L["polys"])) / 1e6, 1)}))

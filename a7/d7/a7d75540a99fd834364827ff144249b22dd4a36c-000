@@ -1,0 +1,30 @@
+# 11 October 2026 : measured frequency equaliser, out = c + sum_i w_i * (c - blur(c, R_i)); weights by least squares on the
+# full resolution residual. COP Blur Gaussian of size R pixels equals a gaussian of sigma R / 2 (calibrated, error 0).
+# FR : égaliseur de fréquences mesuré, poids par moindres carrés en pleine résolution.
+import json
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import numpy as np
+from RefLib import load_gray, blur
+
+RADII = (1.0, 2.0, 4.0, 8.0)
+
+
+def pc(a, b, m):
+    a = a[m] - a[m].mean(); b = b[m] - b[m].mean()
+    return float((a * b).sum() / np.sqrt((a * a).sum() * (b * b).sum()))
+
+
+def fit(r, c, v, radii=RADII):
+    H = np.stack([(c - blur(c, R / 2.0))[v] for R in radii], 1)
+    w, *_ = np.linalg.lstsq(H, (r - c)[v], rcond=None)
+    out = c + sum(wi * (c - blur(c, R / 2.0)) for wi, R in zip(w, radii))
+    return [float(x) for x in w], out
+
+
+if __name__ == "__main__":
+    r = load_gray(sys.argv[1]); c = load_gray(sys.argv[2])
+    v = load_gray(sys.argv[3]) > 0.5 if len(sys.argv) > 3 and sys.argv[3] else np.ones_like(r, bool)
+    w, out = fit(r, c, v)
+    print(json.dumps({"before": round(pc(c, r, v), 4), "after": round(pc(out, r, v), 4), "weights": [round(x, 3) for x in w], "radii": RADII}))

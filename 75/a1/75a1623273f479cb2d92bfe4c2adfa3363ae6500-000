@@ -1,0 +1,200 @@
+# 11 October 2026 : measurement toolkit for height reproduction (reference vs candidate), numpy only
+# FR : outillage de mesure (référence contre candidat), numpy seul. Les masques noir et blanc ont des seuils ABSOLUS tirés de la référence.
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import numpy as np
+from PIL import Image
+from RefLib import load_gray, blur
+
+# Parameter interface (single place), 11 October 2026
+P = {
+    "work_res": 2048,                 # 11 October 2026 : full resolution; 1024 (box downsample) had overstated identity (0.998 vs 0.980)
+    "mask_quantiles": [0.10, 0.25, 0.50, 0.75, 0.90],
+    "bands": [(1, 2), (2, 4), (4, 8), (8, 16), (16, 32), (32, 64)],  # DoG sigma pairs in work pixels
+    "line_sigma": 2.0,                # high-pass for raised thin lines
+    "line_quantile": 0.95,
+    "ssim_sigma": 1.5,
+    "tiles": 4,
+}
+
+
+def down(a, res):
+    f = a.shape[0] // res
+    if f <= 1:
+        return a
+    h, w = a.shape[0] // f * f, a.shape[1] // f * f
+    return a[:h, :w].reshape(h // f, f, w // f, f).mean((1, 3))
+
+
+def pearson(a, b, m=None):
+    if m is not None:
+        a, b = a[m], b[m]
+    a = a - a.mean()
+    b = b - b.mean()
+    return float((a * b).sum() / (np.sqrt((a * a).sum() * (b * b).sum()) + 1e-12))
+
+
+def ssim(a, b, m, s):
+    C1, C2 = 0.01 ** 2, 0.03 ** 2
+    mu_a, mu_b = blur(a, s), blur(b, s)
+    va = blur(a * a, s) - mu_a ** 2
+    vb = blur(b * b, s) - mu_b ** 2
+    cab = blur(a * b, s) - mu_a * mu_b
+    smap = ((2 * mu_a * mu_b + C1) * (2 * cab + C2)) / ((mu_a ** 2 + mu_b ** 2 + C1) * (va + vb + C2))
+    return float(smap[m].mean())
+
+
+def iou(x, y, m):
+    x, y = x & m, y & m
+    u = (x | y).sum()
+    return float((x & y).sum() / u) if u else 1.0
+
+
+def aniso(a):
+    gx = np.roll(a, -1, 1) - np.roll(a, 1, 1)
+    gy = np.roll(a, -1, 0) - np.roll(a, 1, 0)
+    jxx, jyy, jxy = (gx * gx).mean(), (gy * gy).mean(), (gx * gy).mean()
+    tr = jxx + jyy
+    det = jxx * jyy - jxy * jxy
+    l1 = tr / 2 + np.sqrt(max(tr * tr / 4 - det, 0))
+    l2 = tr / 2 - np.sqrt(max(tr * tr / 4 - det, 0))
+    return float((l1 - l2) / (l1 + l2 + 1e-12)), float(np.sqrt(tr))
+
+
+def measure(cand, ref, valid):
+    res = P["work_res"]
+    # 11 October 2026 : exact box downsample (identity at 2048); a bilinear resample had smoothed both images and inflated scores
+    c, r = down(cand, res), down(ref, res)
+    m = down(valid.astype(np.float32), res) > 0.99
+    out = {}
+    d = (c - r)[m]
+    out["mae"] = float(np.abs(d).mean())
+    out["rmse"] = float(np.sqrt((d * d).mean()))
+    out["pearson"] = pearson(c, r, m)
+    out["ssim"] = ssim(c, r, m, P["ssim_sigma"])
+    out["mean"] = [float(c[m].mean()), float(r[m].mean())]
+    out["std"] = [float(c[m].std()), float(r[m].std())]
+    sc, sr = np.sort(c[m]), np.sort(r[m])
+    out["hist_w1"] = float(np.abs(sc - sr).mean())
+    bands = {}
+    for s0, s1 in P["bands"]:
+        bc = blur(c, s0) - blur(c, s1)
+        br = blur(r, s0) - blur(r, s1)
+        bands[f"{s0}-{s1}"] = {"corr": round(pearson(bc, br, m), 4),
+                               "energy_ratio": round(float(bc[m].std() / (br[m].std() + 1e-12)), 4)}
+    out["bands"] = bands
+    lc, lr = blur(c, 32), blur(r, 32)
+    out["lowpass32_corr"] = pearson(lc, lr, m)
+    an_c, ge_c = aniso(c)
+    an_r, ge_r = aniso(r)
+    out["aniso"] = [an_c, an_r]
+    out["grad_energy_ratio"] = ge_c / (ge_r + 1e-12)
+    masks = {}
+    for q in P["mask_quantiles"]:
+        t = float(np.quantile(r[m], q))
+        hi = iou(c > t, r > t, m)
+        lo = iou(c <= t, r <= t, m)
+        masks[f"q{int(q * 100):02d}"] = {"t": round(t, 4), "iou_above": round(hi, 4), "iou_below": round(lo, 4)}
+    out["masks"] = masks
+    hc = c - blur(c, P["line_sigma"] * 2)
+    hr = r - blur(r, P["line_sigma"] * 2)
+    tl = float(np.quantile(hr[m], P["line_quantile"]))
+    out["lines_iou"] = iou(hc > tl, hr > tl, m)
+    tl2 = float(np.quantile(hr[m], 1 - P["line_quantile"]))
+    out["grooves_iou"] = iou(hc < tl2, hr < tl2, m)
+    n = P["tiles"]
+    tsz = res // n
+    tiles = []
+    for i in range(n):
+        for j in range(n):
+            sl = (slice(i * tsz, (i + 1) * tsz), slice(j * tsz, (j + 1) * tsz))
+            mm = m[sl]
+            tiles.append(round(float(c[sl][mm].mean() - r[sl][mm].mean()), 4))
+    out["tile_mean_diff"] = tiles
+    # composite indices (reported, not a gate): structure = low frequencies + masks, detail = bands 1-8
+    out["structure_index"] = float(np.mean([out["lowpass32_corr"], bands["16-32"]["corr"], bands["32-64"]["corr"],
+                                            masks["q25"]["iou_below"], masks["q75"]["iou_above"]]))
+    out["detail_index"] = float(np.mean([bands["1-2"]["corr"], bands["2-4"]["corr"], bands["4-8"]["corr"], out["lines_iou"]]))
+    return out
+
+
+def panel(cand, ref, valid, path, title=""):
+    """ref | candidate | |diff| x4 | masks q25/q75 overlay (white both, red ref only, green candidate only)."""
+    res = 512
+    # 11 October 2026 : resample to exactly res (a 1254 px reference does not divide into 512)
+    rs = lambda a: np.asarray(Image.fromarray(a.astype(np.float32), "F").resize((res, res), Image.BILINEAR))
+    c, r = rs(cand), rs(ref)
+    m = rs(valid.astype(np.float32)) > 0.99
+    diff = np.clip(np.abs(c - r) * 4, 0, 1)
+    t25 = np.quantile(r[m], 0.25)
+    t75 = np.quantile(r[m], 0.75)
+    ov = np.zeros((res, res, 3), np.float32)
+    for t, side in ((t75, "hi"), (t25, "lo")):
+        rc = (r > t) if side == "hi" else (r <= t)
+        cc = (c > t) if side == "hi" else (c <= t)
+        ov[rc & cc] += 0.5
+        ov[rc & ~cc, 0] += 0.5
+        ov[~rc & cc, 1] += 0.5
+    g = lambda a: np.repeat(np.clip(a, 0, 1)[..., None], 3, 2)
+    img = np.concatenate([g(r), g(c), g(diff), np.clip(ov, 0, 1)], 1)
+    Image.fromarray((img * 255).astype(np.uint8)).save(path)
+
+
+if __name__ == "__main__":
+    cand_p, ref_p, valid_p = sys.argv[1:4]
+    out_json = sys.argv[4] if len(sys.argv) > 4 else None
+    cand = load_gray(cand_p)
+    ref = load_gray(ref_p)
+    valid = load_gray(valid_p) > 0.5
+    if cand.shape != ref.shape:
+        im = Image.fromarray((cand * 65535).astype(np.uint16), mode="I;16").resize(ref.shape[::-1], Image.LANCZOS)
+        cand = np.asarray(im).astype(np.float32) / 65535.0
+    res = measure(cand, ref, valid)
+    s = json.dumps(res)
+    if out_json:
+        open(out_json, "w").write(json.dumps(res, indent=1))
+        panel(cand, ref, valid, out_json.replace(".json", "_panel.png"))
+    print(s)
+
+
+def gates(cand, ref, valid, tile=512):
+    """Deterministic and stochastic gates (section 8.3 of Copernicus2): thumbnails, averaged joint profiles, band energy ratios,
+    residual histogram distance. Values are reported, thresholds are PROPOSED. 11 October 2026."""
+    g = {}
+    r = ref
+    rng = float(np.quantile(r[valid], 0.99) - np.quantile(r[valid], 0.01))
+    n = r.shape[0]
+    t = n // 64
+    th_c = cand[: n // t * t, : n // t * t].reshape(64, t, 64, t).mean((1, 3))
+    th_r = r[: n // t * t, : n // t * t].reshape(64, t, 64, t).mean((1, 3))
+    g["A_thumb64_mae_pct"] = round(float(np.abs(th_c - th_r).mean() / rng * 100), 3)
+    yy, xx = np.mgrid[0:n, 0:n]
+    dx = np.minimum(xx % tile, tile - xx % tile)
+    dy = np.minimum(yy % tile, tile - yy % tile)
+    d = np.minimum(dx, dy)
+    pc, pr = [], []
+    for k in range(0, 64):
+        sel = valid & (d == k)
+        pc.append(cand[sel].mean())
+        pr.append(r[sel].mean())
+    pc, pr = np.array(pc), np.array(pr)
+    g["D_joint_profile_corr"] = round(float(np.corrcoef(pc, pr)[0, 1]), 4)
+    g["D_joint_profile_mae_pct"] = round(float(np.abs(pc - pr).mean() / rng * 100), 3)
+    ratios = {}
+    for s0, s1 in ((1, 2), (2, 4), (4, 8), (8, 16), (16, 32)):
+        bc = blur(cand, s0) - blur(cand, s1)
+        br = blur(r, s0) - blur(r, s1)
+        ratios[f"{s0}-{s1}"] = round(float(bc[valid].std() / (br[valid].std() + 1e-12)), 3)
+    g["G_band_energy_ratio"] = ratios
+    hc = cand - blur(cand, 2.0)
+    hr = r - blur(r, 2.0)
+    g["F_residual_w1_pct"] = round(float(np.abs(np.sort(hc[valid]) - np.sort(hr[valid])).mean() / rng * 100), 3)
+    g["F_residual_std_ratio"] = round(float(hc[valid].std() / (hr[valid].std() + 1e-12)), 3)
+    full_rmse = float(np.sqrt(((cand - r)[valid] ** 2).mean()))
+    sigma = float(hr[valid].std())
+    g["J_rmse"] = round(full_rmse, 4)
+    g["J_floor_if_stochastic"] = round(float(np.sqrt(2) * sigma), 4)
+    return g

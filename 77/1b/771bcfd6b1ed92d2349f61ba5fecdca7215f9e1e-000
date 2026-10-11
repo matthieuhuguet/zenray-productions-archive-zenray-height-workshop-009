@@ -1,0 +1,17 @@
+# 11 October 2026 : geometry from File SOPs must give the same image as before (stash SOPs). FR : même image avec les fichiers.
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import json
+import numpy as np
+from RefLib import load_gray
+import Execute as EX
+ROOT = EX.ROOT
+out = os.path.join(ROOT, "checks", "incremental")
+R = json.load(open(os.path.join(ROOT, "versions/final/CeramicWallTiles_L2c/recipe_current.json")))
+EX.Run.hom("import hou\nn = hou.node('/obj/ZRH_IncTest_file')\nif n: n.destroy()\nresult = 1")
+EX.build_final("/obj/ZRH_IncTest_file", [{"type": "lattice", "cx": 4, "cy": 4}] + R[:8], os.path.join(out, "a8_file.png"))
+d = float(np.abs(load_gray(os.path.join(out, "a8_file.png")) - load_gray(os.path.join(out, "a8.png"))).max())
+print(json.dumps({"max_abs_diff_vs_stash": d}))
+for n in ("/obj/ZRH_IncTest", "/obj/ZRH_IncTest_full", "/obj/ZRH_IncTest_file"):
+    EX.Run.hom(f"import hou\nn = hou.node('{n}')\nif n: n.destroy()\nresult = 1")

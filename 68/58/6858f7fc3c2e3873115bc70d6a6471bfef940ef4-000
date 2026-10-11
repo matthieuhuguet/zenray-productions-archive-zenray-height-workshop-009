@@ -1,0 +1,34 @@
+# 11 October 2026 : keep the hip light. Stash SOPs that no ZRH graph imports are deleted; the used ones are written to
+# .bgeo.sc files in the workshop and replaced by File SOPs of the same name, so every sopimport path stays valid.
+# Executed inside Houdini through the bridge. FR : sort les données mesurées de la scène vers des fichiers bgeo.
+import os
+import hou
+
+GEO_DIR = "/Users/zenray/.claude/tmp/tmp-zenray-height/data/geo"
+data = hou.node("/obj/ZRH_Data")
+used = set()
+for net in hou.node("/obj").children():
+    if net.name().startswith("ZRH_") and net.name() != "ZRH_Data":
+        for c in net.allSubChildren():
+            if c.type().name() == "sopimport":
+                used.add(c.parm("soppath").eval())
+report = {"deleted": 0, "externalised": 0, "points_externalised": 0}
+for s in list(data.children()):
+    if s.type().name() != "stash":
+        continue
+    if s.path() not in used:
+        s.destroy()
+        report["deleted"] += 1
+        continue
+    g = s.parm("stash").evalAsGeometry()
+    path = os.path.join(GEO_DIR, s.name() + ".bgeo.sc")
+    g.saveToFile(path)
+    name, pos = s.name(), s.position()
+    report["points_externalised"] += g.intrinsicValue("pointcount")
+    s.destroy()
+    f = data.createNode("file", name)
+    f.parm("file").set(path)
+    f.setPosition(pos)
+    report["externalised"] += 1
+data.layoutChildren()
+result = report

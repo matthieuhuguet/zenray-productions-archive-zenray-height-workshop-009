@@ -1,0 +1,25 @@
+# 11 October 2026 : the parallel region tracing must give exactly the serial polygons, and be faster.
+# FR : le découpage parallèle doit rendre exactement les mêmes polygones que le découpage série.
+import glob
+import json
+import os
+import sys
+import time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from RefLib import load_gray
+import Fit as F
+
+if __name__ == "__main__":
+    F.set_lattice(4, 4)
+    R = "/Users/zenray/.claude/tmp/tmp-zenray-height/"
+    r = load_gray(R + "refs/derived/ref_height_4x4_2048.png")
+    c = load_gray(sorted(glob.glob(R + "versions/final/CeramicWallTiles_L3q/L*_regions_s2_p2.png"))[-1])
+    v = load_gray(R + "refs/derived/ref_height_valid_2048.png") > 0.5
+    res = r - c
+    t = time.time(); F._pool().submit(int, 1).result(); tpool = time.time() - t
+    t = time.time(); A = F.region_layer_fast(res, v, sigma=1, K=8, work=2048, tag="x"); tp = time.time() - t
+    orig = F.region_polys_from_bins
+    F.region_polys_from_bins = lambda *a, **k: orig(*a, parallel=False, **k)
+    t = time.time(); B = F.region_layer_fast(res, v, sigma=1, K=8, work=2048, tag="x"); ts = time.time() - t
+    print(json.dumps({"pool_start_s": round(tpool, 2), "parallel_s": round(tp, 2), "serial_s": round(ts, 2),
+                      "identical": json.dumps(A["polys"]) == json.dumps(B["polys"]), "polys": len(A["polys"])}))

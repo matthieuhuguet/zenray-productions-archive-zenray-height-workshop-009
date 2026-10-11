@@ -1,0 +1,12 @@
+#!/bin/zsh
+# 11 October 2026 : finishing at full resolution: pixel passes, measured equaliser, histogram, then the seam layer if needed
+cd /Users/zenray/.claude/tmp/tmp-zenray-height
+P=/Users/zenray/.venvs/shorts/bin/python
+$P -I Scripts/RunPasses.py CeramicWallTiles_L5 /obj/ZRH_CeramicWallTiles_L3 refs/derived/ref_height_4x4_2048.png refs/derived/ref_height_valid_2048.png L5 versions/final/CeramicWallTiles_L3r > logs/finish_ceramic.log 2>&1
+$P -I Scripts/MakeTileable.py versions/final/CeramicWallTiles_L5 /obj/ZRH_CeramicWallTiles_L3 refs/derived/ref_height_4x4_2048.png refs/derived/ref_height_valid_2048.png >> logs/finish_ceramic.log 2>&1
+echo "ceramic done $(date +%H:%M:%S)"
+for n in whitepaint tile; do
+  $P -I Scripts/RunPasses.py Secondary_${n}_L5 /obj/ZRH_Secondary_$n refs/secondary/${n}_height_ref_2048.png "" L5 versions/final/Secondary_${n}_L3q > logs/finish_$n.log 2>&1
+  $P -I Scripts/MakeTileable.py versions/final/Secondary_${n}_L5 /obj/ZRH_Secondary_$n refs/secondary/${n}_height_ref_2048.png "" >> logs/finish_$n.log 2>&1
+  echo "$n done $(date +%H:%M:%S)"
+done

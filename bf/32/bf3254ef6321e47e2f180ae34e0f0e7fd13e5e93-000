@@ -1,0 +1,35 @@
+# 11 October 2026 : offline model of a region pass (quantise the blurred residual into K levels, soften, add) to choose the
+# fine pass settings before spending Houdini time; scores at full resolution. FR : simulation hors Houdini des passes fines.
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import numpy as np
+from RefLib import load_gray
+import Fit as F
+
+
+def pc(a, b):
+    a = a - a.mean(); b = b - b.mean()
+    return float((a * b).sum() / np.sqrt((a * a).sum() * (b * b).sum()))
+
+
+def one_pass(r, c, sigma, K, soft):
+    res = r - c
+    low = F.blur(res, sigma) if sigma > 0 else res
+    t = np.quantile(low, np.linspace(0, 1, K + 1)[1:-1])
+    b = np.digitize(low, t)
+    med = np.array([np.median(low[b == k]) if (b == k).any() else 0.0 for k in range(K)])
+    q = med[b]
+    if soft > 0:
+        q = F.blur(q, soft)
+    return c + q
+
+
+if __name__ == "__main__":
+    r = load_gray(sys.argv[1]); c0 = load_gray(sys.argv[2])
+    print("start", round(pc(c0, r), 4))
+    for sigma, K, soft in ((1, 8, 1.0), (1, 8, 0.5), (0.5, 16, 0.0), (0, 16, 0.0), (0, 32, 0.0)):
+        c = c0.copy(); hist = []
+        for i in range(4):
+            c = one_pass(r, c, sigma, K, soft); hist.append(round(pc(c, r), 4))
+        print(f"sigma {sigma} K {K} soft {soft}:", hist)

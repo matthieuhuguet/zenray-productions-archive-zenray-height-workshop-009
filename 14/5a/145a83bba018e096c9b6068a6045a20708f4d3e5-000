@@ -1,0 +1,7 @@
+#!/bin/zsh
+# 11 October 2026 : full workflow (structure, measured regions, successive approximation passes to 1 px) on the three Louisiana Bayou heights
+cd /Users/zenray/.claude/tmp/tmp-zenray-height
+for n in window whitepaint tile; do
+  /Users/zenray/.venvs/shorts/bin/python -I Scripts/RunPasses.py Secondary_${n}_L3q /obj/ZRH_Secondary_$n refs/secondary/${n}_height_ref_2048.png "" L3 > logs/passes_secondary_$n.log 2>&1
+  echo "$n done $(date +%H:%M:%S)"
+done

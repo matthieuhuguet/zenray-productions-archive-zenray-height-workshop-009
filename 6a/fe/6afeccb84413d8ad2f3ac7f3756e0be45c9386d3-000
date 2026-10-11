@@ -1,0 +1,51 @@
+# 11 October 2026 : fast creation of measured geometry in a stash SOP (bulk points, bulk attributes, bulk polygons)
+# FR : création rapide de la géométrie mesurée dans un stash (points, attributs et polygones en bloc).
+import os
+import hou
+
+# 11 October 2026 : measured geometry is written to .bgeo.sc files read by a File SOP of the same name, so the hip stays light
+# (stash SOPs had put 30 million points inside LouisianaBayou.hiplc). FR : géométrie mesurée hors de la scène.
+GEO_DIR = "/Users/zenray/.claude/tmp/tmp-zenray-height/data/geo"
+
+
+def stash_polys(parent_path, name, polys, value_key="val", closed=True, rgb=False):
+    """polys: list of dicts with 'pts' [(x, y)], optional 'z', and value_key (float) or 'rgb' (3 floats)."""
+    parent = hou.node(parent_path) or hou.node("/obj").createNode("geo", parent_path.split("/")[-1])
+    parent.setDisplayFlag(False)
+    geo = hou.Geometry()
+    geo.addAttrib(hou.attribType.Point, "Cd", (0.0, 0.0, 0.0))
+    positions = []
+    colors = []
+    counts = []
+    for p in polys:
+        z = float(p.get("z", 0.0))
+        pts = p["pts"]
+        if rgb:
+            c = [float(v) for v in p["rgb"]]
+        else:
+            v = float(p.get(value_key, 1.0))
+            c = [v, v, v]
+        for x, y in pts:
+            positions.append(hou.Vector3(x, y, z))
+            colors.extend(c)
+        counts.append(len(pts))
+    geo.createPoints(positions)
+    geo.setPointFloatAttribValues("Cd", colors)
+    # polygons: consecutive point ranges, given as point numbers (11 October 2026 : is_closed is positional only in H22)
+    idx = 0
+    prim_points = []
+    for n in counts:
+        prim_points.append(tuple(range(idx, idx + n)))
+        idx += n
+    geo.createPolygons(tuple(prim_points), closed)
+    os.makedirs(GEO_DIR, exist_ok=True)
+    path = os.path.join(GEO_DIR, name + ".bgeo.sc")
+    geo.saveToFile(path)
+    n = parent.node(name)
+    if n is not None and n.type().name() != "file":
+        n.destroy()
+        n = None
+    n = n or parent.createNode("file", name)
+    n.parm("file").set(path)
+    n.parm("reload").pressButton()
+    return n

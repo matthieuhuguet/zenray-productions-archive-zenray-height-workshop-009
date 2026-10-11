@@ -1,0 +1,348 @@
+# 11 October 2026 : registry of the 16 candidate METHODS for reproducing a reference height layer by layer.
+# Each method is a planner: given the residual after the previous phase, it returns the next layer(s) of the recipe.
+# Methods that need trials (greedy, optimisation, seed search, dictionary) evaluate candidates by REAL Copernicus builds.
+# FR : registre des 16 méthodes candidates ; chaque méthode planifie la couche suivante à partir du résidu mesuré.
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import numpy as np
+from RefLib import load_gray, blur
+import Fit as F
+import Run
+
+ROOT = Run.ROOT
+NOISE_UNITS = json.load(open(os.path.join(ROOT, "measures", "noise_unit_bands.json")))
+SCRATCH = "M00_Eval"
+
+
+def score(m):
+    """Provisional composite used ONLY to rank trials inside greedy or optimisation methods (not a gate). 11 October 2026."""
+    bands = np.mean([b["corr"] for b in m["bands"].values()])
+    masks = np.mean([0.5 * (x["iou_above"] + x["iou_below"]) for x in m["masks"].values()])
+    return float(0.4 * m["pearson"] + 0.2 * m["ssim"] + 0.2 * bands + 0.2 * masks)
+
+
+def evaluate(recipe, tag="trial"):
+    b = Run.build(SCRATCH, 0, recipe)
+    if not b.get("ok"):
+        return -9.0, None, None
+    m, c = Run.measure(SCRATCH, 0)
+    return score(m), m, c
+
+
+# ---------------- layer factories (measurements -> layer parameters) ----------------
+def L_joint(ctx):
+    return {"type": "joint_profile", "op": "base", "keys": F.joint_profile(ctx["r"], ctx["v"]), "note": "measured joint profile"}
+
+
+def L_joint_add(ctx):
+    """Joint profile as a RELATIVE layer (profile minus its value at the tile centre), added on top of an existing result."""
+    keys = F.joint_profile(ctx["r"], ctx["v"])
+    centre = keys[-1][1]
+    return {"type": "joint_profile", "op": "add", "keys": [(x, y - centre) for x, y in keys], "note": "measured joint profile, relative"}
+
+
+def L_rowtable(ctx):
+    return {"type": "row_table", "values": F.row_table(ctx["res"], ctx["v"]), "note": "per row offset"}
+
+
+def L_rowplane(ctx):
+    pl = F.row_plane(ctx["res"], ctx["v"])
+    return {"type": "row_plane", "a": [x[1] for x in pl], "b": [x[2] for x in pl], "note": "per row plane"}
+
+
+def L_corners(ctx):
+    return {"type": "corners", "c": F.row_corners(ctx["res"], ctx["v"]), "note": "per row bilinear corners"}
+
+
+def L_sides(ctx):
+    return {"type": "side_profiles", "profiles": F.side_profiles(ctx["res"], ctx["v"]), "note": "per side joint profiles"}
+
+
+def L_regions(ctx, sigma, K, work, tag, min_px=6, simplify_px=0.5):
+    return F.region_layer_fast(ctx["res"], ctx["v"], sigma=sigma, K=K, work=work, tag=tag, min_px=min_px, simplify_px=simplify_px)
+
+
+BORDER_PX = 8.0
+
+
+def off_border(items, px=BORDER_PX, res=2048):
+    """11 October 2026 : traced shapes touching the canvas border are cut by the wrap and leave a tiling seam; keep only interior ones."""
+    lim = 1.0 - 2.0 * px / res
+    return [it for it in items if all(abs(x) < lim and abs(y) < lim for x, y in it["pts"])]
+
+
+def L_lines(ctx, tag, gain=1.0, width_px=3.5):
+    lines, info = F.ridge_lines2(ctx["res"], ctx["v"])
+    lines = off_border(lines)
+    return {"type": "lines", "tag": tag, "curves": lines, "width": width_px / 2048 * 2,
+            "profile": [(0, 0), (0.3, 0.6), (0.5, 1.0), (0.7, 0.6), (1, 0)], "gain": gain, "note": f"traced ridge centrelines ({len(lines)})"}
+
+
+def L_blobs(ctx, tag, sigma_hp=6.0, q=0.985, sign=None):
+    L = F.blob_layer(ctx["res"], ctx["v"], sigma_hp=sigma_hp, q=q, tag=tag, both_signs=(sign is None))
+    if sign == -1:
+        L = F.blob_layer(-ctx["res"], ctx["v"], sigma_hp=sigma_hp, q=q, tag=tag, both_signs=False)
+        for p in L["polys"]:
+            p["val"] = -p["val"]
+    L["polys"] = off_border(L["polys"])
+    return L
+
+
+def best_element_size(s0, s1):
+    """Element size whose unit band energy peaks inside the band [s0, s1] (2048 pixels)."""
+    key = None
+    best = -1
+    for es, u in NOISE_UNITS.items():
+        e = sum(v for k, v in u["bands"].items() if int(k.split("-")[0]) >= s0 and int(k.split("-")[1]) <= s1)
+        if e > best:
+            best, key = e, es
+    return float(key)
+
+
+def L_noise(ctx, s0, s1, offset=(0.0, 0.0), tag=""):
+    es = best_element_size(s0, s1)
+    u = NOISE_UNITS[str(es)] if str(es) in NOISE_UNITS else NOISE_UNITS[es]
+    unit = np.sqrt(sum(v * v for k, v in u["bands"].items() if int(k.split("-")[0]) >= s0 and int(k.split("-")[1]) <= s1))
+    target = F.band_std(ctx["res"], ctx["v"], s0, s1)
+    return {"type": "noise", "amp": float(target / max(unit, 1e-6)), "elementsize": es, "offset": list(offset), "oct": 6, "rough": 0.5,
+            "note": f"statistical band {s0}-{s1} px"}
+
+
+def L_noise_mask(ctx, cls, tag, offset=(0.0, 0.0)):
+    """Statistical bright or dark class: thresholded noise with the reference coverage and the class mean amplitude."""
+    r, v, res = ctx["r"], ctx["v"], ctx["res"]
+    fx, fy, row, col, d = F.tile_coords(r.shape[0])
+    inner = v & (d > 0.06)
+    if cls == "bright":
+        m = r > np.quantile(r[inner], 0.75)
+    elif cls == "dark":
+        m = r < np.quantile(r[inner], 0.25)
+    else:
+        hp = r - blur(r, 3.0)
+        m = hp > np.quantile(hp[inner], 0.93)
+    cover = float(m[inner].mean())
+    amp = float(res[inner & m].mean() - res[inner & ~m].mean())
+    from math import erf, sqrt
+    # unit noise around 0.5 with std 0.15 * namp; find threshold giving the coverage (gaussian approximation)
+    namp = 0.2
+    sd = 0.15 * namp
+    lo, hi = -5.0, 5.0
+    for _ in range(60):
+        z = 0.5 * (lo + hi)
+        tail = 0.5 * (1 - erf(z / sqrt(2)))
+        if tail > cover:
+            lo = z
+        else:
+            hi = z
+    thr = 0.5 + z * sd
+    es = 0.05 if cls != "lines" else 0.02
+    return {"type": "noise_mask", "namp": namp, "elementsize": es, "threshold": thr, "soft": sd * 0.3, "amp": amp,
+            "fold": cls == "lines", "offset": list(offset), "note": f"statistical {cls} class, coverage {cover:.2f}"}
+
+
+def L_hist(ctx):
+    return {"type": "hist", "keys": F.quantile_keys(ctx["c"], ctx["r"], ctx["v"]), "note": "histogram matched to reference"}
+
+
+# ---------------- method planners ----------------
+def fixed(seq):
+    def plan(ctx):
+        return seq[ctx["phase"] - 1](ctx)
+    return plan
+
+
+def plan_greedy(ctx):
+    """M01 : try every candidate layer on the current recipe with a real build, keep the best."""
+    tag = f"M01_P{ctx['phase']}"
+    cands = []
+    have = {L["type"] for L in ctx["recipe"]}
+    if "joint_profile" not in have:
+        cands.append(("joint", lambda: [L_joint(ctx)]))
+    cands += [("rowtable", lambda: [L_rowtable(ctx)]), ("rowplane", lambda: [L_rowplane(ctx)]), ("sides", lambda: [L_sides(ctx)]),
+              ("regions32", lambda: [L_regions(ctx, 32, 8, 512, tag + "_r32")]), ("regions8", lambda: [L_regions(ctx, 8, 8, 1024, tag + "_r8")]),
+              ("lines", lambda: [L_lines(ctx, tag + "_ln")]), ("blobs", lambda: [L_blobs(ctx, tag + "_bl")]),
+              ("noise2_8", lambda: [L_noise(ctx, 2, 8)])]
+    if ctx["recipe"]:
+        cands.append(("hist", lambda: [L_hist(ctx)]))
+    best = None
+    trials = []
+    for name, mk in cands:
+        if ctx["res"] is None and name not in ("joint",):
+            continue
+        layers = mk()
+        s, m, c = evaluate(ctx["recipe"] + layers)
+        trials.append((name, round(s, 4)))
+        if best is None or s > best[0]:
+            best = (s, name, layers)
+    ctx["log"]["trials"] = trials
+    ctx["log"]["chosen"] = best[1]
+    return best[2]
+
+
+def plan_optim(ctx):
+    """M08 : fixed template, each phase optimises one parameter group by coordinate search with real builds."""
+    ph = ctx["phase"]
+    if ph == 1:
+        base = L_joint(ctx)
+        best = None
+        for g in (0.7, 0.85, 1.0, 1.15, 1.3):
+            for off in (-0.04, 0.0, 0.04):
+                keys = [(x, 0.6 + (y - 0.6) * g + off) for x, y in base["keys"]]
+                L = dict(base, keys=keys)
+                s, m, c = evaluate([L])
+                if best is None or s > best[0]:
+                    best = (s, [L], (g, off))
+        ctx["log"]["chosen"] = {"gain": best[2][0], "offset": best[2][1]}
+        return best[1]
+    if ph == 2:
+        T = L_rowtable(ctx)
+        P = L_rowplane(ctx)
+        best = None
+        for gt in (0.6, 0.8, 1.0, 1.2):
+            for gp in (0.0, 0.5, 1.0):
+                layers = [dict(T, values=[x * gt for x in T["values"]])]
+                if gp > 0:
+                    layers.append(dict(P, a=[x * gp for x in P["a"]], b=[x * gp for x in P["b"]]))
+                s, m, c = evaluate(ctx["recipe"] + layers)
+                if best is None or s > best[0]:
+                    best = (s, layers, (gt, gp))
+        ctx["log"]["chosen"] = {"table_gain": best[2][0], "plane_gain": best[2][1]}
+        return best[1]
+    if ph == 3:
+        best = None
+        for (s0, s1) in ((16, 64), (8, 32), (4, 16)):
+            for k in (0.5, 1.0, 1.5):
+                L = L_noise(ctx, s0, s1)
+                L["amp"] *= k
+                s, m, c = evaluate(ctx["recipe"] + [L])
+                if best is None or s > best[0]:
+                    best = (s, [L], (s0, s1, k))
+        ctx["log"]["chosen"] = {"band": best[2][:2], "gain": best[2][2]}
+        return best[1]
+    best = None
+    for k in (0.5, 1.0, 1.5):
+        for (s0, s1) in ((1, 4), (2, 8)):
+            L = L_noise(ctx, s0, s1)
+            L["amp"] *= k
+            s, m, c = evaluate(ctx["recipe"] + [L])
+            if best is None or s > best[0]:
+                best = (s, [L], (s0, s1, k))
+    ctx["log"]["chosen"] = {"band": best[2][:2], "gain": best[2][2]}
+    return best[1]
+
+
+def plan_seed(ctx):
+    """M12 : purely procedural selection: among N noise offsets, keep the realisation that best fits the residual."""
+    ph = ctx["phase"]
+    if ph == 1:
+        return [L_joint(ctx)]
+    if ph == 2:
+        return [L_rowtable(ctx)]
+    band = (16, 64) if ph == 3 else (2, 8)
+    best = None
+    rng = np.random.default_rng(100 + ph)
+    for i in range(16):
+        off = (float(rng.uniform(0, 50)), float(rng.uniform(0, 50)))
+        L = L_noise(ctx, band[0], band[1], offset=off)
+        s, m, c = evaluate(ctx["recipe"] + [L])
+        if best is None or s > best[0]:
+            best = (s, [L], off)
+    ctx["log"]["chosen"] = {"offset": best[2]}
+    return best[1]
+
+
+def plan_vision(ctx):
+    """M15 : layer chosen by looking at the residual (decision written in the log); parameters measured."""
+    ph = ctx["phase"]
+    tag = f"M15_P{ph}"
+    choice = {1: "joint", 2: "regions24", 3: "lines", 4: "blobs"}[ph]
+    ctx["log"]["chosen"] = choice
+    if choice == "joint":
+        return [L_joint(ctx)]
+    if choice == "regions24":
+        return [L_regions(ctx, 24, 8, 512, tag)]
+    if choice == "lines":
+        return [L_lines(ctx, tag)]
+    return [L_blobs(ctx, tag)]
+
+
+def plan_omp(ctx):
+    """M16 : dictionary of atoms rendered by Copernicus, orthogonal matching pursuit on the reference (weights by least squares)."""
+    atoms = ctx["shared"].get("omp_atoms")
+    if atoms is None:
+        atoms = []
+        base = {"r": ctx["r"], "v": ctx["v"], "res": ctx["r"] - ctx["r"][ctx["v"]].mean(), "c": None}
+        atoms.append(("joint", L_joint(base)))
+        for i in range(4):
+            atoms.append((f"row{i}", {"type": "row_table", "values": [1.0 if j == i else 0.0 for j in range(4)]}))
+            atoms.append((f"planeA{i}", {"type": "row_plane", "a": [1.0 if j == i else 0.0 for j in range(4)], "b": [0.0] * 4}))
+            atoms.append((f"planeB{i}", {"type": "row_plane", "a": [0.0] * 4, "b": [1.0 if j == i else 0.0 for j in range(4)]}))
+        for es in (0.01, 0.02, 0.05, 0.1):
+            for k, off in enumerate(((0.0, 0.0), (17.3, 5.1), (8.7, 31.9))):
+                atoms.append((f"noise{es}_{k}", {"type": "noise", "amp": 1.0, "elementsize": es, "offset": list(off), "oct": 6, "rough": 0.5}))
+        atoms.append(("lines", L_lines(base, "M16_atoms_ln")))
+        atoms.append(("blobs", L_blobs(base, "M16_atoms_bl")))
+        atoms.append(("regions32", L_regions(base, 32, 8, 512, "M16_atoms_r32")))
+        rendered = []
+        for name, L in atoms:
+            L0 = dict(L)
+            L0["op"] = "base"
+            s, m, c = evaluate([L0])
+            rendered.append(c)
+        ctx["shared"]["omp_atoms"] = atoms
+        ctx["shared"]["omp_rendered"] = rendered
+    rendered = ctx["shared"]["omp_rendered"]
+    atoms = ctx["shared"]["omp_atoms"]
+    r, v = ctx["r"], ctx["v"]
+    k_target = {1: 1, 2: 4, 3: 8, 4: 16}[ctx["phase"]]
+    sub = (slice(None, None, 4), slice(None, None, 4))
+    y = r[sub][v[sub]]
+    X = np.stack([a[sub][v[sub]] for a in rendered], 1)
+    sel = []
+    resid = y - y.mean()
+    for _ in range(k_target):
+        cors = [abs(np.corrcoef(X[:, j], resid)[0, 1]) if j not in sel and X[:, j].std() > 1e-6 else -1 for j in range(X.shape[1])]
+        sel.append(int(np.argmax(cors)))
+        A = np.concatenate([X[:, sel], np.ones((len(y), 1))], 1)
+        w, *_ = np.linalg.lstsq(A, y, rcond=None)
+        resid = y - A @ w
+    layers = [{"type": "const", "op": "base", "value": float(w[-1]), "note": "OMP bias"}]
+    for j, wj in zip(sel, w[:-1]):
+        L = dict(atoms[j][1])
+        L["op"] = "add"
+        L["weight"] = float(wj)
+        L["note"] = f"atom {atoms[j][0]} weight {wj:.3f}"
+        layers.append(L)
+    ctx["log"]["chosen"] = [atoms[j][0] for j in sel]
+    ctx["replace_recipe"] = True
+    return layers
+
+
+METHODS = {
+    "M01_GreedyResidual": ("Greedy residual pursuit over a mixed dictionary, each candidate built and measured", plan_greedy),
+    "M02_HierarchyStatistical": ("Macro meso micro hierarchy with statistical noise only", fixed([L_joint, L_rowtable, lambda c: [L_noise(c, 16, 64)], lambda c: [L_noise(c, 2, 8)]])),
+    "M03_FrequencyPyramid": ("Frequency pyramid: one statistical noise per band, coarse to fine", fixed([L_joint, lambda c: [L_noise(c, 32, 64)], lambda c: [L_noise(c, 8, 32)], lambda c: [L_noise(c, 2, 8)]])),
+    "M04_MaskClassesStatistical": ("Black and white mask classes reproduced by thresholded noise with measured coverage", fixed([L_joint, lambda c: [L_noise_mask(c, "bright", "M04")], lambda c: [L_noise_mask(c, "dark", "M04")], lambda c: [L_noise_mask(c, "lines", "M04")]])),
+    "M05_StructureCurves": ("Exact structure, then traced curves and traced blobs", fixed([L_joint, L_rowtable, lambda c: [L_lines(c, "M05_P3")], lambda c: [L_blobs(c, "M05_P4")]])),
+    "M06_ProfileFamily": ("Everything as measured profiles of distance fields", fixed([L_joint, L_sides, L_rowtable, L_rowplane])),
+    "M07_HistogramAnchored": ("Each phase adds a layer then re-matches the reference histogram", fixed([lambda c: [L_joint(c)], lambda c: [L_rowtable(c)], lambda c: [L_noise(c, 2, 8)], lambda c: [L_lines(c, "M07_P4")]])),
+    "M08_ParametricOptim": ("Fixed parametric template, one parameter group optimised per phase (score method)", plan_optim),
+    "M09_TileTables": ("Index mapping tables per tile row: offset, plane, bilinear corners, then structure", fixed([L_rowtable, L_rowplane, L_corners, lambda c: [dict(L_joint(c), op="add", keys=[(x, y - F.joint_profile(c["r"], c["v"])[-1][1]) for x, y in F.joint_profile(c["r"], c["v"])])]])),
+    "M10_Morphological": ("Morphological decomposition: plateaus, bright top hat, dark top hat, then joints", fixed([lambda c: [L_regions(c, 32, 4, 512, "M10_P1")], lambda c: [L_blobs(c, "M10_P2", sigma_hp=3.0, q=0.92, sign=1)], lambda c: [L_blobs(c, "M10_P3", sigma_hp=3.0, q=0.92, sign=-1)], L_joint_add])),
+    "M11_NoiseBank": ("Example statistics: bank of noises matched by spectrum, streaks, histogram", fixed([lambda c: [dict(L_noise(c, 16, 64), op="base", center=float(c["r"][c["v"]].mean()))], lambda c: [L_noise(c, 4, 16)], lambda c: [dict(L_noise(c, 2, 8), type="streaks", length_px=30.0, gain=1.0)], lambda c: [L_hist(c)]])),
+    "M12_SeedSearch": ("Procedural selection: best of 16 noise realisations per band", plan_seed),
+    "M13_IsoContours": ("Iso contour staircase filled by maskfromcurves", fixed([L_joint, L_rowtable, lambda c: [F.contour_layer(c["res"], c["v"], 16, 8, "M13_P3")], lambda c: [F.contour_layer(c["res"], c["v"], 4, 6, "M13_P4")]])),
+    "M14_VectorRegions": ("Multi scale vector regions (posterised residual traced as polygons), coarse to fine", fixed([L_joint, lambda c: [L_regions(c, 32, 8, 512, "M14_P2")], lambda c: [L_regions(c, 8, 8, 1024, "M14_P3")], lambda c: [L_regions(c, 2, 6, 2048, "M14_P4")]])),
+    "M15_VisionGuided": ("Layer chosen by eye on the residual, parameters measured", plan_vision),
+    "M16_DictionaryOMP": ("Orthogonal matching pursuit over Copernicus rendered atoms", plan_omp),
+}
+
+
+def L_eq(ctx, radii=(1.0, 2.0, 4.0, 8.0)):
+    """11 October 2026 : measured frequency equaliser fitted on the current result at full resolution (FitEqualizer)."""
+    import FitEqualizer as FE
+    w, _ = FE.fit(ctx["r"], ctx["c"], ctx["v"], radii)
+    return {"type": "eq", "radii": list(radii), "weights": [round(x, 5) for x in w], "note": "frequency equaliser, least squares at full resolution"}

@@ -1,0 +1,772 @@
+# 11 October 2026 : offline fitting toolkit (numpy only) that turns MEASUREMENTS of the reference into layer parameters.
+# Never outputs pixels: only tables, curves (polylines), profiles and scalar parameters.
+# FR : outillage d'ajustement hors ligne ; il ne produit jamais de pixels, seulement des tables, courbes, profils et scalaires.
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import numpy as np
+from RefLib import blur, load_gray
+
+TILE = 512
+N = 2048
+TILES = 4
+# 11 October 2026 : lattice of the current reference (cells along x and y), set by set_lattice() before fitting
+LAT = {"cx": 4, "cy": 4}
+
+
+def set_lattice(cx, cy):
+    LAT["cx"], LAT["cy"] = int(cx), int(cy)
+
+
+def tile_coords(n=N, t=None):
+    """Local coordinates inside each cell (fx, fy in 0..1, image orientation), row and column ids, box distance."""
+    yy, xx = np.mgrid[0:n, 0:n].astype(np.float32)
+    tx = n / LAT["cx"]
+    ty = n / LAT["cy"]
+    fx = ((xx + 0.5) % tx) / tx
+    fy = ((yy + 0.5) % ty) / ty
+    row = np.minimum((yy // ty).astype(np.int32), LAT["cy"] - 1)
+    col = np.minimum((xx // tx).astype(np.int32), LAT["cx"] - 1)
+    d = np.minimum(np.minimum(fx, 1 - fx), np.minimum(fy, 1 - fy))
+    return fx, fy, row, col, d
+
+
+def joint_profile(r, valid, step_px=2, max_px=None):
+    """Mean height against the box distance to the nearest joint, keys in cell units (0 on the joint, 0.5 at the centre)."""
+    fx, fy, row, col, d = tile_coords(r.shape[0])
+    cell = r.shape[0] / max(LAT["cx"], LAT["cy"])
+    dp = d * cell
+    max_px = int(cell / 2) if max_px is None else max_px
+    keys = []
+    for k in range(0, max_px + 1, step_px):
+        sel = valid & (dp >= k) & (dp < k + step_px)
+        if sel.any():
+            keys.append((k / cell, float(r[sel].mean())))
+    return keys
+
+
+def row_table(res, valid, inset=0.08):
+    fx, fy, row, col, d = tile_coords(res.shape[0])
+    vals = []
+    for i in range(LAT["cy"]):
+        sel = valid & (row == i) & (d > inset)
+        vals.append(float(res[sel].mean()) if sel.any() else 0.0)
+    return vals
+
+
+def row_plane(res, valid, inset=0.08):
+    """Least squares plane per tile row on local coords: res ~ c + a (fx - 0.5) + b (fy - 0.5)."""
+    fx, fy, row, col, d = tile_coords(res.shape[0])
+    out = []
+    for i in range(LAT["cy"]):
+        sel = valid & (row == i) & (d > inset)
+        A = np.stack([np.ones(sel.sum()), fx[sel] - 0.5, fy[sel] - 0.5], 1)
+        c, *_ = np.linalg.lstsq(A, res[sel], rcond=None)
+        out.append([float(c[0]), float(c[1]), float(c[2])])
+    return out
+
+
+def row_corners(res, valid, inset=0.08):
+    """Bilinear field per tile row from 4 corner values (2 x 2 per tile, the coarsest allowed table)."""
+    fx, fy, row, col, d = tile_coords(res.shape[0])
+    out = []
+    for i in range(LAT["cy"]):
+        sel = valid & (row == i) & (d > inset)
+        u, v = fx[sel], fy[sel]
+        A = np.stack([(1 - u) * (1 - v), u * (1 - v), (1 - u) * v, u * v], 1)
+        c, *_ = np.linalg.lstsq(A, res[sel], rcond=None)
+        out.append([float(x) for x in c])
+    return out
+
+
+def band(a, s0, s1):
+    return blur(a, s0) - blur(a, s1)
+
+
+def band_std(a, valid, s0, s1):
+    return float(band(a, s0, s1)[valid].std())
+
+
+def quantile_keys(src, ref, valid, n=17):
+    """Monotone transfer curve mapping src quantiles to ref quantiles (histogram matching as a measured 1D curve)."""
+    qs = np.linspace(0, 1, n)
+    sq = np.quantile(src[valid], qs)
+    rq = np.quantile(ref[valid], qs)
+    return [(float(a), float(b)) for a, b in zip(sq, rq)]
+
+
+# ---------------- marching squares (periodic field) ----------------
+def contours(field, level, pad=48):
+    """Iso-contours of a periodic field as polylines in canvas units [-1, 1] (y up). The field is padded by wrap so shapes
+    crossing a border are drawn whole; maskfromcurves keeps only what falls inside the canvas."""
+    n = field.shape[0]
+    f = np.pad(field, pad, mode="wrap")
+    H, W = f.shape
+    b = f > level
+    tl, tr, br, bl = b[:-1, :-1], b[:-1, 1:], b[1:, 1:], b[1:, :-1]
+    case = tl * 8 + tr * 4 + br * 2 + bl * 1
+    segs = []
+    v = f
+
+    def interp(y0, x0, y1, x1):
+        a, c = v[y0, x0], v[y1, x1]
+        t = 0.5 if a == c else (level - a) / (c - a)
+        return (y0 + t * (y1 - y0), x0 + t * (x1 - x0))
+
+    ys, xs = np.nonzero((case > 0) & (case < 15))
+    for y, x in zip(ys, xs):
+        cc = case[y, x]
+        T = interp(y, x, y, x + 1)
+        R = interp(y, x + 1, y + 1, x + 1)
+        B = interp(y + 1, x, y + 1, x + 1)
+        L = interp(y, x, y + 1, x)
+        table = {1: [(L, B)], 2: [(B, R)], 3: [(L, R)], 4: [(T, R)], 5: [(L, T), (B, R)], 6: [(T, B)], 7: [(L, T)],
+                 8: [(L, T)], 9: [(T, B)], 10: [(T, R), (L, B)], 11: [(T, R)], 12: [(L, R)], 13: [(B, R)], 14: [(L, B)]}
+        for s in table[int(cc)]:
+            segs.append(s)
+    # link segments into polylines
+    def key(p):
+        return (round(p[0], 4), round(p[1], 4))
+    adj = {}
+    for i, (p, q) in enumerate(segs):
+        adj.setdefault(key(p), []).append((i, 0))
+        adj.setdefault(key(q), []).append((i, 1))
+    used = np.zeros(len(segs), bool)
+    lines = []
+    for i in range(len(segs)):
+        if used[i]:
+            continue
+        used[i] = True
+        p, q = segs[i]
+        chain = [p, q]
+        for direction in (0, 1):
+            while True:
+                end = chain[-1] if direction == 0 else chain[0]
+                nxt = None
+                for j, side in adj.get(key(end), []):
+                    if not used[j]:
+                        nxt = (j, side)
+                        break
+                if nxt is None:
+                    break
+                j, side = nxt
+                used[j] = True
+                other = segs[j][1 - side]
+                if direction == 0:
+                    chain.append(other)
+                else:
+                    chain.insert(0, other)
+        lines.append(chain)
+    out = []
+    for ch in lines:
+        if len(ch) < 4:
+            continue
+        pts = [((x - pad) / n * 2 - 1, 1 - (y - pad) / n * 2) for (y, x) in ch]
+        closed = key(ch[0]) == key(ch[-1])
+        out.append({"pts": simplify(pts, 0.0008), "closed": bool(closed)})
+    return out
+
+
+def simplify(pts, eps):
+    """Douglas Peucker in canvas units. Closed loops (first point equals last) are split at their farthest point first.
+    11 October 2026 : a closed loop has a zero length base segment, which collapsed every loop to two points."""
+    if len(pts) < 3:
+        return pts
+    a0 = np.array(pts, dtype=np.float64)
+    if np.hypot(*(a0[0] - a0[-1])) < 1e-9:
+        k = int(np.argmax(np.hypot(a0[:, 0] - a0[0, 0], a0[:, 1] - a0[0, 1])))
+        if 0 < k < len(a0) - 1:
+            first = simplify([tuple(x) for x in a0[: k + 1]], eps)
+            second = simplify([tuple(x) for x in a0[k:]], eps)
+            return first[:-1] + second
+    a = np.array(pts)
+    keep = np.zeros(len(a), bool)
+    keep[0] = keep[-1] = True
+    stack = [(0, len(a) - 1)]
+    while stack:
+        i, j = stack.pop()
+        if j <= i + 1:
+            continue
+        p, q = a[i], a[j]
+        d = q - p
+        nrm = np.hypot(*d) + 1e-12
+        seg = a[i + 1:j]
+        dist = np.abs(d[0] * (seg[:, 1] - p[1]) - d[1] * (seg[:, 0] - p[0])) / nrm
+        k = int(dist.argmax())
+        if dist[k] > eps:
+            keep[i + 1 + k] = True
+            stack.append((i, i + 1 + k))
+            stack.append((i + 1 + k, j))
+    return [tuple(map(float, x)) for x in a[keep]]
+
+
+# ---------------- thin ridge skeleton tracing ----------------
+def zhang_suen(mask):
+    m = mask.copy().astype(np.uint8)
+    changed = True
+    while changed:
+        changed = False
+        for step in (0, 1):
+            P = np.pad(m, 1)
+            p2, p3, p4 = P[:-2, 1:-1], P[:-2, 2:], P[1:-1, 2:]
+            p5, p6, p7 = P[2:, 2:], P[2:, 1:-1], P[2:, :-2]
+            p8, p9 = P[1:-1, :-2], P[:-2, :-2]
+            nb = [p2, p3, p4, p5, p6, p7, p8, p9]
+            B = sum(x.astype(np.int32) for x in nb)
+            seq = nb + [p2]
+            A = sum(((seq[k] == 0) & (seq[k + 1] == 1)).astype(np.int32) for k in range(8))
+            if step == 0:
+                c = (p2 * p4 * p6 == 0) & (p4 * p6 * p8 == 0)
+            else:
+                c = (p2 * p4 * p8 == 0) & (p2 * p6 * p8 == 0)
+            rem = (m == 1) & (B >= 2) & (B <= 6) & (A == 1) & c
+            if rem.any():
+                m[rem] = 0
+                changed = True
+    return m.astype(bool)
+
+
+def trace_skeleton(sk, min_len=6):
+    """Follow 8-connected skeleton pixels into polylines (pixel coords)."""
+    H, W = sk.shape
+    pts = set(zip(*np.nonzero(sk)))
+    nbrs = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+    def neigh(p):
+        return [(p[0] + dy, p[1] + dx) for dy, dx in nbrs if (p[0] + dy, p[1] + dx) in pts]
+    deg = {p: len(neigh(p)) for p in pts}
+    visited = set()
+    lines = []
+    starts = [p for p in pts if deg[p] != 2] + [p for p in pts if deg[p] == 2]
+    for s in starts:
+        if s in visited:
+            continue
+        path = [s]
+        visited.add(s)
+        cur = s
+        while True:
+            nx = [q for q in neigh(cur) if q not in visited]
+            if not nx:
+                break
+            cur = nx[0]
+            visited.add(cur)
+            path.append(cur)
+            if deg[cur] > 2:
+                break
+        if len(path) >= min_len:
+            lines.append(path)
+    return lines
+
+
+def ridge_lines(r, valid, sigma=3.0, q=0.93, min_len=8, work=2048):
+    """Raised thin lines of the reference as polylines + measured amplitude and width (canvas units)."""
+    hp = r - blur(r, sigma)
+    t = float(np.quantile(hp[valid], q))
+    mask = (hp > t) & valid
+    sk = zhang_suen(mask)
+    paths = trace_skeleton(sk, min_len=min_len)
+    n = r.shape[0]
+    out = []
+    for p in paths:
+        amp = float(np.mean([hp[y, x] for y, x in p]))
+        pts = [(x / n * 2 - 1 + 1.0 / n, 1 - y / n * 2 - 1.0 / n) for (y, x) in p]
+        out.append({"pts": simplify(pts, 0.0015), "amp": amp})
+    return out, t
+
+
+def write_json(obj, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    json.dump(obj, open(path, "w"))
+
+
+def contour_layer(res, valid, sigma=16.0, K=8, tag="contours", soft_px=None):
+    """Staircase of iso-level masks reproducing the low-frequency part of a residual (measured shapes, no pixels).
+    11 October 2026."""
+    low = blur(res, sigma)
+    qs = np.linspace(0, 1, K + 2)[1:-1]
+    t = np.quantile(low[valid], qs)
+    edges = np.concatenate([[low[valid].min() - 1], t, [low[valid].max() + 1]])
+    med = [float(np.median(low[valid & (low > edges[j]) & (low <= edges[j + 1])])) for j in range(K + 1)]
+    levels = []
+    for k in range(K):
+        cs = contours(low, float(t[k]))
+        levels.append({"level": float(t[k]), "step": med[k + 1] - med[k], "curves": cs})
+    return {"type": "contours", "tag": tag, "levels": levels, "bias": med[0],
+            "soft_px": float(soft_px if soft_px is not None else sigma * 0.8), "note": f"{K} iso levels of residual low pass s{sigma:g}"}
+
+
+def label_components(mask):
+    """8-connected labelling by iterative minimum propagation (numpy only). Returns int labels, -1 outside the mask."""
+    H, W = mask.shape
+    lab = np.where(mask, np.arange(H * W).reshape(H, W), H * W + 1).astype(np.int64)
+    big = H * W + 1
+    while True:
+        p = np.pad(lab, 1, constant_values=big)
+        nb = [p[1:-1, 1:-1], p[:-2, 1:-1], p[2:, 1:-1], p[1:-1, :-2], p[1:-1, 2:], p[:-2, :-2], p[:-2, 2:], p[2:, :-2], p[2:, 2:]]
+        new = np.minimum.reduce(nb)
+        new = np.where(mask, new, big)
+        if np.array_equal(new, lab):
+            break
+        lab = new
+    lab = np.where(mask, lab, -1)
+    return lab
+
+
+def polygon_area(pts):
+    a = np.array(pts)
+    return 0.5 * float(np.sum(a[:, 0] * np.roll(a[:, 1], -1) - np.roll(a[:, 0], -1) * a[:, 1]))
+
+
+def region_layer(res, valid, sigma=16.0, K=8, work=512, pad=24, tag="regions", soft_px=None, simplify_eps=0.002):
+    """Posterised low-frequency residual as closed polygons, one per connected region of each bin, carrying the region value.
+    Depth (z) grows as polygons get smaller so enclosed regions are drawn on top. 11 October 2026."""
+    low = blur(res, sigma)
+    n = res.shape[0]
+    f = n // work
+    lw = low[: n // f * f, : n // f * f].reshape(work, f, work, f).mean((1, 3))
+    vw = valid[: n // f * f, : n // f * f].reshape(work, f, work, f).mean((1, 3)) > 0.5
+    qs = np.linspace(0, 1, K + 1)[1:-1]
+    t = np.quantile(lw[vw], qs)
+    bins = np.digitize(lw, t)
+    vals = [float(np.median(lw[vw & (bins == b)])) for b in range(K)]
+    bp = np.pad(bins, pad, mode="wrap")
+    polys = []
+    for b in range(K):
+        lab = label_components(bp == b)
+        for comp in np.unique(lab[lab >= 0]):
+            m = (lab == comp)
+            if m.sum() < 6:
+                continue
+            loops = contours_binary(m)
+            if not loops:
+                continue
+            outer = max(loops, key=lambda L: abs(polygon_area(L)))
+            pts = [((x - pad) / work * 2 - 1, 1 - (y - pad) / work * 2) for (y, x) in outer]
+            pts = simplify(pts, simplify_eps)
+            if len(pts) < 3:
+                continue
+            polys.append({"pts": pts, "val": vals[b], "area": abs(polygon_area(pts)), "closed": True})
+    polys.sort(key=lambda p: -p["area"])
+    for i, p in enumerate(polys):
+        p["z"] = i * 1e-4
+    return {"type": "regions", "tag": tag, "polys": polys, "soft_px": float(soft_px if soft_px is not None else sigma * 0.9),
+            "note": f"{K} posterised bins of residual low pass s{sigma:g}, {len(polys)} regions"}
+
+
+def contours_binary(m):
+    """Closed loops around a binary mask (pixel coords y, x), using marching squares on a zero-padded float mask."""
+    fm = np.pad(m.astype(np.float32), 1)
+    H, W = fm.shape
+    tl, tr, br, bl = fm[:-1, :-1] > 0.5, fm[:-1, 1:] > 0.5, fm[1:, 1:] > 0.5, fm[1:, :-1] > 0.5
+    case = tl * 8 + tr * 4 + br * 2 + bl * 1
+    ys, xs = np.nonzero((case > 0) & (case < 15))
+    segs = []
+    for y, x in zip(ys, xs):
+        cc = int(case[y, x])
+        T, R, B, L = (y, x + 0.5), (y + 0.5, x + 1), (y + 1, x + 0.5), (y + 0.5, x)
+        table = {1: [(L, B)], 2: [(B, R)], 3: [(L, R)], 4: [(T, R)], 5: [(L, T), (B, R)], 6: [(T, B)], 7: [(L, T)],
+                 8: [(L, T)], 9: [(T, B)], 10: [(T, R), (L, B)], 11: [(T, R)], 12: [(L, R)], 13: [(B, R)], 14: [(L, B)]}
+        segs += table[cc]
+    adj = {}
+    for i, (p, q) in enumerate(segs):
+        adj.setdefault(p, []).append((i, 0))
+        adj.setdefault(q, []).append((i, 1))
+    used = [False] * len(segs)
+    loops = []
+    for i in range(len(segs)):
+        if used[i]:
+            continue
+        used[i] = True
+        chain = [segs[i][0], segs[i][1]]
+        while True:
+            end = chain[-1]
+            nxt = None
+            for j, side in adj.get(end, []):
+                if not used[j]:
+                    nxt = (j, side)
+                    break
+            if nxt is None:
+                break
+            j, side = nxt
+            used[j] = True
+            chain.append(segs[j][1 - side])
+        if len(chain) > 3:
+            loops.append([(y - 1, x - 1) for (y, x) in chain])
+    return loops
+
+
+def side_profiles(res, valid, max_px=48, step_px=2):
+    """Residual profile against the distance to each tile side (top, bottom, left, right in IMAGE orientation), zero far away.
+    Pixels are assigned to their nearest side only. 11 October 2026."""
+    fx, fy, row, col, d = tile_coords(res.shape[0])
+    dists = {"left": fx, "right": 1 - fx, "top": fy, "bottom": 1 - fy}
+    size = {"left": res.shape[0] / LAT["cx"], "right": res.shape[0] / LAT["cx"], "top": res.shape[0] / LAT["cy"], "bottom": res.shape[0] / LAT["cy"]}
+    nearest = np.argmin(np.stack([dists[k] for k in ("left", "right", "top", "bottom")]), 0)
+    out = {}
+    for i, k in enumerate(("left", "right", "top", "bottom")):
+        dd = dists[k] * size[k]
+        keys = []
+        for t in range(0, max_px + 1, step_px):
+            sel = valid & (nearest == i) & (dd >= t) & (dd < t + step_px)
+            keys.append((t / size[k], float(res[sel].mean()) if sel.any() else 0.0))
+        keys.append(((max_px + 8) / size[k], 0.0))
+        out[k] = keys
+    return out
+
+
+def blob_layer(res, valid, sigma_hp=6.0, q=0.985, min_area=12, work=2048, tag="blobs", both_signs=True, soft_px=1.0, max_blobs=6000):
+    """Compact high-contrast blobs (chips, spots) of the high-passed residual as polygons carrying their mean value.
+    11 October 2026 : run based labelling and per component crops (the first version scanned the full image per blob)."""
+    hp = res - blur(res, sigma_hp)
+    n = res.shape[0]
+    polys = []
+    for sign in ((1, -1) if both_signs else (1,)):
+        t = float(np.quantile((sign * hp)[valid], q))
+        m = (sign * hp > t) & valid
+        lab, nlab = label_runs(m)
+        if nlab == 0:
+            continue
+        ys, xs = np.nonzero(lab >= 0)
+        ids = lab[ys, xs]
+        cnt = np.bincount(ids, minlength=nlab)
+        sums = np.bincount(ids, weights=hp[ys, xs], minlength=nlab)
+        y0 = np.full(nlab, 1 << 30); y1 = np.full(nlab, -1); x0 = np.full(nlab, 1 << 30); x1 = np.full(nlab, -1)
+        np.minimum.at(y0, ids, ys); np.maximum.at(y1, ids, ys); np.minimum.at(x0, ids, xs); np.maximum.at(x1, ids, xs)
+        order = np.argsort(-cnt)
+        for k in order[:max_blobs]:
+            if cnt[k] < min_area:
+                break
+            sub = lab[y0[k]:y1[k] + 1, x0[k]:x1[k] + 1] == k
+            loops = contours_binary(sub)
+            if not loops:
+                continue
+            outer = max(loops, key=lambda L: abs(polygon_area(L)))
+            pts = [((x + x0[k] + 0.5) / n * 2 - 1, 1 - (y + y0[k] + 0.5) / n * 2) for (y, x) in outer]
+            pts = simplify(pts, 0.6 / n * 2)
+            if len(pts) >= 3:
+                polys.append({"pts": pts, "val": float(sums[k] / cnt[k]), "area": abs(polygon_area(pts)), "closed": True})
+    polys.sort(key=lambda p: -p["area"])
+    for i, p in enumerate(polys):
+        p["z"] = i * 1e-5
+    return {"type": "regions", "tag": tag, "polys": polys, "soft_px": soft_px,
+            "note": f"{len(polys)} compact blobs of high pass s{sigma_hp:g} beyond quantile {q}"}
+
+
+def noise_amp_for_band(res, valid, s0, s1, unit_std):
+    """Amplitude that gives a COP noise the same band energy as the residual (unit_std = band std of the noise at amp 1)."""
+    return band_std(res, valid, s0, s1) / max(unit_std, 1e-6)
+
+
+def ridge_lines2(res, valid, sigma=1.2, q_strong=0.97, q_weak=0.88, min_len=12, hp_sigma=4.0, simplify_px=0.8):
+    """Centrelines of bright thin ridges: Hessian ridge strength, non maximum suppression across the ridge, hysteresis,
+    then long polylines that keep their direction through junctions. Amplitude per line from the high pass. 11 October 2026."""
+    n = res.shape[0]
+    s = blur(res, sigma)
+    Ixx = np.roll(s, -1, 1) - 2 * s + np.roll(s, 1, 1)
+    Iyy = np.roll(s, -1, 0) - 2 * s + np.roll(s, 1, 0)
+    Ixy = 0.25 * (np.roll(np.roll(s, -1, 0), -1, 1) - np.roll(np.roll(s, -1, 0), 1, 1) - np.roll(np.roll(s, 1, 0), -1, 1) + np.roll(np.roll(s, 1, 0), 1, 1))
+    half = (Ixx + Iyy) / 2
+    root = np.sqrt(((Ixx - Iyy) / 2) ** 2 + Ixy ** 2)
+    lmin = half - root
+    R = np.maximum(0, -lmin)
+    # eigenvector of lmin (normal to the ridge): (Ixy, lmin - Ixx) or (lmin - Iyy, Ixy)
+    nx = Ixy
+    ny = lmin - Ixx
+    alt = np.abs(nx) + np.abs(ny) < 1e-12
+    nx = np.where(alt, lmin - Iyy, nx)
+    ny = np.where(alt, Ixy, ny)
+    ang = np.arctan2(ny, nx)
+    sx = np.rint(np.cos(ang)).astype(np.int64)
+    sy = np.rint(np.sin(ang)).astype(np.int64)
+    yy, xx = np.mgrid[0:n, 0:n]
+    r1 = R[(yy + sy) % n, (xx + sx) % n]
+    r2 = R[(yy - sy) % n, (xx - sx) % n]
+    nms = (R >= r1) & (R >= r2) & valid
+    ts = float(np.quantile(R[valid], q_strong))
+    tw = float(np.quantile(R[valid], q_weak))
+    weak = nms & (R > tw)
+    strong = nms & (R > ts)
+    # hysteresis: keep weak components touching a strong pixel (8-connected on the thin set, dilated by one pixel)
+    wd = weak | (np.roll(weak, 1, 0) & np.roll(weak, -1, 0))
+    lab = label_components(wd)
+    keep_ids = np.unique(lab[strong & (lab >= 0)])
+    keep = np.isin(lab, keep_ids) & weak
+    paths = trace_long(keep, min_len=min_len)
+    hp = res - blur(res, hp_sigma)
+    out = []
+    for pth in paths:
+        amp = float(np.mean([hp[y, x] for y, x in pth]))
+        pts = [(x / n * 2 - 1 + 1.0 / n, 1 - y / n * 2 - 1.0 / n) for (y, x) in pth]
+        out.append({"pts": simplify(pts, simplify_px / n * 2), "amp": amp})
+    return out, {"R_strong": ts, "R_weak": tw, "pixels": int(keep.sum())}
+
+
+def trace_long(mask, min_len=12):
+    """Trace 8-connected thin pixels into long polylines, preferring the straightest continuation at junctions."""
+    pts = set(zip(*np.nonzero(mask)))
+    nbrs = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+    def neigh(p):
+        return [(p[0] + dy, p[1] + dx) for dy, dx in nbrs if (p[0] + dy, p[1] + dx) in pts]
+    deg = {p: len(neigh(p)) for p in pts}
+    visited = set()
+    lines = []
+    order = sorted(pts, key=lambda p: (deg[p] != 1, deg[p]))
+    for s0 in order:
+        if s0 in visited:
+            continue
+        path = [s0]
+        visited.add(s0)
+        for direction in (1, -1):
+            cur = path[-1] if direction == 1 else path[0]
+            prev = None
+            if len(path) > 1:
+                prev = path[-2] if direction == 1 else path[1]
+            while True:
+                cand = [q for q in neigh(cur) if q not in visited]
+                if not cand:
+                    break
+                if prev is not None:
+                    dy0, dx0 = cur[0] - prev[0], cur[1] - prev[1]
+                    cand.sort(key=lambda q: -((q[0] - cur[0]) * dy0 + (q[1] - cur[1]) * dx0))
+                nxt = cand[0]
+                visited.add(nxt)
+                if direction == 1:
+                    path.append(nxt)
+                else:
+                    path.insert(0, nxt)
+                prev, cur = cur, nxt
+        if len(path) >= min_len:
+            lines.append(path)
+    return lines
+
+
+def label_runs(mask):
+    """Fast 8-connected labelling: run-length encoding per row + union-find over runs. Returns (labels, n). 11 October 2026."""
+    H, W = mask.shape
+    m = mask.astype(np.int8)
+    d = np.diff(np.pad(m, ((0, 0), (1, 1))), axis=1)
+    starts = [np.nonzero(d[y] == 1)[0] for y in range(H)]
+    ends = [np.nonzero(d[y] == -1)[0] for y in range(H)]
+    run_y, run_s, run_e = [], [], []
+    for y in range(H):
+        for s, e in zip(starts[y], ends[y]):
+            run_y.append(y)
+            run_s.append(int(s))
+            run_e.append(int(e))
+    n = len(run_y)
+    parent = list(range(n))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+    row_index = {}
+    idx = 0
+    for y in range(H):
+        cnt = len(starts[y])
+        row_index[y] = (idx, idx + cnt)
+        idx += cnt
+    for y in range(1, H):
+        a0, a1 = row_index[y - 1]
+        b0, b1 = row_index[y]
+        i, j = a0, b0
+        while i < a1 and j < b1:
+            # 11 October 2026 : 4-connectivity (strict overlap of half open runs), the topology of the marching squares saddles;
+            # the first 8-connected version merged diagonal pixels that the contours then split, losing whole regions
+            if run_s[i] < run_e[j] and run_s[j] < run_e[i]:
+                ra, rb = find(i), find(j)
+                if ra != rb:
+                    parent[rb] = ra
+            if run_e[i] < run_e[j]:
+                i += 1
+            else:
+                j += 1
+    roots = {}
+    lab = -np.ones((H, W), np.int64)
+    for k in range(n):
+        r = find(k)
+        if r not in roots:
+            roots[r] = len(roots)
+        lab[run_y[k], run_s[k]:run_e[k]] = roots[r]
+    return lab, len(roots)
+
+
+def _region_polys_task(args):
+    """11 October 2026 : one bin (and one slice of its components) traced in a worker process; same order as the serial loop."""
+    mask, b, val, pad, work, simplify_eps, min_px, part, nparts = args
+    out = []
+    lab, nlab = label_runs(mask)
+    if nlab == 0:
+        return out
+    ys, xs = np.nonzero(lab >= 0)
+    ids = lab[ys, xs]
+    cnt = np.bincount(ids, minlength=nlab)
+    y0 = np.full(nlab, 1 << 30); y1 = np.full(nlab, -1); x0 = np.full(nlab, 1 << 30); x1 = np.full(nlab, -1)
+    np.minimum.at(y0, ids, ys); np.maximum.at(y1, ids, ys); np.minimum.at(x0, ids, xs); np.maximum.at(x1, ids, xs)
+    k0, k1 = nlab * part // nparts, nlab * (part + 1) // nparts
+    for k in range(k0, k1):
+        if cnt[k] < min_px:
+            continue
+        sub = lab[y0[k]:y1[k] + 1, x0[k]:x1[k] + 1] == k
+        loops = contours_binary(sub)
+        if not loops:
+            continue
+        outer = max(loops, key=lambda L: abs(polygon_area(L)))
+        pts = [((x + x0[k] - pad + 0.5) / work * 2 - 1, 1 - (y + y0[k] - pad + 0.5) / work * 2) for (y, x) in outer]
+        pts = simplify(pts, simplify_eps)
+        if len(pts) < 3:
+            continue
+        out.append({"pts": pts, "val": float(val), "area": abs(polygon_area(pts)), "closed": True})
+    return out
+
+
+_POOL = []
+
+
+def _pool():
+    if not _POOL:
+        from concurrent.futures import ProcessPoolExecutor
+        _POOL.append(ProcessPoolExecutor(max_workers=16))
+    return _POOL[0]
+
+
+def region_polys_from_bins(bins, values, pad, work, simplify_eps, min_px=6, value_map=None, parallel=True):
+    """Polygons of every connected region of a posterised (and wrap padded) label image."""
+    if parallel and value_map is None:
+        # 11 October 2026 : the serial tracing took 42 s of a 45 s pass on one core; 16 tasks (bins x 2 slices) on 16 cores
+        nparts = 2
+        tasks = [((bins == b), b, values[int(b)], pad, work, simplify_eps, min_px, part, nparts) for b in np.unique(bins) for part in range(nparts)]
+        polys = []
+        for chunk in _pool().map(_region_polys_task, tasks):
+            polys.extend(chunk)
+        return polys
+    polys = []
+    for b in np.unique(bins):
+        lab, nlab = label_runs(bins == b)
+        if nlab == 0:
+            continue
+        ys, xs = np.nonzero(lab >= 0)
+        ids = lab[ys, xs]
+        cnt = np.bincount(ids, minlength=nlab)
+        y0 = np.full(nlab, 1 << 30); y1 = np.full(nlab, -1); x0 = np.full(nlab, 1 << 30); x1 = np.full(nlab, -1)
+        np.minimum.at(y0, ids, ys); np.maximum.at(y1, ids, ys); np.minimum.at(x0, ids, xs); np.maximum.at(x1, ids, xs)
+        for k in range(nlab):
+            if cnt[k] < min_px:
+                continue
+            sub = lab[y0[k]:y1[k] + 1, x0[k]:x1[k] + 1] == k
+            loops = contours_binary(sub)
+            if not loops:
+                continue
+            outer = max(loops, key=lambda L: abs(polygon_area(L)))
+            pts = [((x + x0[k] - pad + 0.5) / work * 2 - 1, 1 - (y + y0[k] - pad + 0.5) / work * 2) for (y, x) in outer]
+            pts = simplify(pts, simplify_eps)
+            if len(pts) < 3:
+                continue
+            val = values[int(b)] if value_map is None else value_map(b, k)
+            polys.append({"pts": pts, "val": float(val), "area": abs(polygon_area(pts)), "closed": True})
+    return polys
+
+
+def region_layer_fast(res, valid, sigma=16.0, K=8, work=512, pad=24, tag="regions", soft_px=None, simplify_px=0.5, min_px=6):
+    """Same contract as region_layer, with run based labelling and per component crops (fast at 2048). 11 October 2026."""
+    low = blur(res, sigma) if sigma > 0 else res
+    n = res.shape[0]
+    f = max(1, n // work)
+    lw = low[: n // f * f, : n // f * f].reshape(n // f, f, n // f, f).mean((1, 3))
+    vw = valid[: n // f * f, : n // f * f].reshape(n // f, f, n // f, f).mean((1, 3)) > 0.5
+    qs = np.linspace(0, 1, K + 1)[1:-1]
+    t = np.quantile(lw[vw], qs)
+    bins = np.digitize(lw, t)
+    vals = [float(np.median(lw[vw & (bins == b)])) for b in range(K)]
+    bp = np.pad(bins, pad, mode="wrap")
+    polys = region_polys_from_bins(bp, vals, pad, lw.shape[0], simplify_px / lw.shape[0] * 2, min_px=min_px)
+    polys.sort(key=lambda p: -p["area"])
+    for i, p in enumerate(polys):
+        p["z"] = i * 1e-5
+    return {"type": "regions", "tag": tag, "polys": polys, "soft_px": float(soft_px if soft_px is not None else max(1.0, sigma * 0.9)),
+            "note": f"{K} posterised bins of residual low pass s{sigma:g} at {lw.shape[0]} px, {len(polys)} regions"}
+
+
+def kmeans_colors(rgb, valid, K=10, iters=25, seed=3, sample=200000):
+    """Plain k-means on RGB (numpy), returns centres (K, 3) and labels for every pixel. 11 October 2026."""
+    rng = np.random.default_rng(seed)
+    X = rgb[valid]
+    idx = rng.choice(len(X), size=min(sample, len(X)), replace=False)
+    S = X[idx]
+    C = S[rng.choice(len(S), size=K, replace=False)]
+    for _ in range(iters):
+        d = ((S[:, None, :] - C[None, :, :]) ** 2).sum(2)
+        lab = d.argmin(1)
+        newC = np.array([S[lab == k].mean(0) if (lab == k).any() else C[k] for k in range(K)])
+        if np.allclose(newC, C, atol=1e-5):
+            break
+        C = newC
+    full = np.zeros(rgb.shape[:2], np.int64)
+    H = rgb.shape[0]
+    for y0 in range(0, H, 256):
+        blk = rgb[y0:y0 + 256]
+        d = ((blk[:, :, None, :] - C[None, None, :, :]) ** 2).sum(3)
+        full[y0:y0 + 256] = d.argmin(2)
+    return C, full
+
+
+def mode_filter(lab, K, passes=1):
+    """3 x 3 majority filter on an integer label image (removes isolated pixels before polygonisation). 11 October 2026."""
+    for _ in range(passes):
+        counts = np.zeros((K,) + lab.shape, np.int16)
+        for k in range(K):
+            m = (lab == k).astype(np.int16)
+            p = np.pad(m, 1, mode="wrap")
+            counts[k] = sum(p[1 + dy: 1 + dy + lab.shape[0], 1 + dx: 1 + dx + lab.shape[1]] for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+        lab = counts.argmax(0)
+    return lab
+
+
+def color_region_layer(rgb, valid, K=10, sigma=1.0, work=1024, pad=24, tag="bc_regions", simplify_px=0.5, soft_px=1.0):
+    """Base color as closed polygons of k-means colour regions, each carrying its mean colour (RGB in Cd). 11 October 2026."""
+    n = rgb.shape[0]
+    sm = np.stack([blur(rgb[..., c], sigma) for c in range(3)], -1) if sigma > 0 else rgb
+    f = max(1, n // work)
+    sw = sm[: n // f * f, : n // f * f].reshape(n // f, f, n // f, f, 3).mean((1, 3))
+    vw = valid[: n // f * f, : n // f * f].reshape(n // f, f, n // f, f).mean((1, 3)) > 0.5
+    C, lab = kmeans_colors(sw, vw, K=K)
+    lab = mode_filter(lab, K, passes=1)
+    bp = np.pad(lab, pad, mode="wrap")
+    swp = np.pad(sw, ((pad, pad), (pad, pad), (0, 0)), mode="wrap")
+    polys = []
+    W = sw.shape[0]
+    for b in range(K):
+        labc, nlab = label_runs(bp == b)
+        if nlab == 0:
+            continue
+        ys, xs = np.nonzero(labc >= 0)
+        ids = labc[ys, xs]
+        cnt = np.bincount(ids, minlength=nlab)
+        sums = np.zeros((nlab, 3))
+        for c in range(3):
+            sums[:, c] = np.bincount(ids, weights=swp[ys, xs, c], minlength=nlab)
+        y0 = np.full(nlab, 1 << 30); y1 = np.full(nlab, -1); x0 = np.full(nlab, 1 << 30); x1 = np.full(nlab, -1)
+        np.minimum.at(y0, ids, ys); np.maximum.at(y1, ids, ys); np.minimum.at(x0, ids, xs); np.maximum.at(x1, ids, xs)
+        for k in range(nlab):
+            if cnt[k] < 4:
+                continue
+            sub = labc[y0[k]:y1[k] + 1, x0[k]:x1[k] + 1] == k
+            loops = contours_binary(sub)
+            if not loops:
+                continue
+            outer = max(loops, key=lambda L: abs(polygon_area(L)))
+            pts = [((x + x0[k] - pad + 0.5) / W * 2 - 1, 1 - (y + y0[k] - pad + 0.5) / W * 2) for (y, x) in outer]
+            pts = simplify(pts, simplify_px / W * 2)
+            if len(pts) < 3:
+                continue
+            col = (sums[k] / cnt[k]).tolist()
+            polys.append({"pts": pts, "rgb": col, "area": abs(polygon_area(pts)), "closed": True})
+    polys.sort(key=lambda p: -p["area"])
+    for i, p in enumerate(polys):
+        p["z"] = i * 1e-5
+    return {"type": "color_regions", "tag": tag, "polys": polys, "soft_px": soft_px, "palette": C.tolist(),
+            "note": f"{K} colour clusters at {W} px, {len(polys)} regions"}

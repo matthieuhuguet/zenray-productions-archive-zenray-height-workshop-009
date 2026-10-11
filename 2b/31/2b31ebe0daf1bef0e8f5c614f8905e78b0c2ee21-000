@@ -1,0 +1,9 @@
+#!/bin/zsh
+# 12 October 2026 : ceramic end to end with the extended valid mask: L3 plan, then pixel passes + equaliser, then seam check
+cd /Users/zenray/.claude/tmp/tmp-zenray-height
+P=/Users/zenray/.venvs/shorts/bin/python
+V=refs/derived/ref_height_valid2_2048.png
+$P -I Scripts/RunPasses.py CeramicWallTiles_F1 /obj/ZRH_CeramicWallTiles_L3 refs/derived/ref_height_4x4_2048.png $V L3 > logs/ceramic_F1.log 2>&1
+$P -I Scripts/RunPasses.py CeramicWallTiles_F2 /obj/ZRH_CeramicWallTiles_L3 refs/derived/ref_height_4x4_2048.png $V L5 versions/final/CeramicWallTiles_F1 > logs/ceramic_F2.log 2>&1
+$P -I Scripts/MakeTileable.py versions/final/CeramicWallTiles_F2 /obj/ZRH_CeramicWallTiles_L3 refs/derived/ref_height_4x4_2048.png $V >> logs/ceramic_F2.log 2>&1
+echo "ceramic final done $(date +%H:%M:%S)"

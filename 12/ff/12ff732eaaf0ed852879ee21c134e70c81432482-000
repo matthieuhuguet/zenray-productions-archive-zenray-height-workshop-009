@@ -1,0 +1,63 @@
+# 11 October 2026 : last step of the method. If the result keeps a seam at the canvas border (wrap jump more than 1.3 times
+# the median interior jump), one "seam" layer is added in the same Copernicus graph; FINAL_height.png becomes the tileable
+# version and the previous one is kept as FINAL_height_untiled.png. FR : dernière étape, rendre la height raccordable.
+import json
+import os
+import shutil
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from RefLib import load_gray
+import Execute as EX
+import Measure as M
+import SeamCheck
+
+
+def make_tileable(out_root, net_path, ref_png, valid_png=None, width_px=4.0, limit=1.3):
+    import numpy as np
+    log = json.load(open(os.path.join(out_root, "log.json")))
+    cells = log.get("cells", [4, 4])
+    recipe = json.load(open(os.path.join(out_root, "recipe_current.json")))
+    recipe = [L for L in recipe if L.get("type") != "seam"]
+    fin = os.path.join(out_root, "FINAL_height.png")
+    untiled = os.path.join(out_root, "FINAL_height_untiled.png")
+    if not os.path.exists(untiled):
+        shutil.copy(fin, untiled)
+    r = load_gray(ref_png)
+    v = load_gray(valid_png) > 0.5 if valid_png else np.ones_like(r, bool)
+    a = load_gray(untiled)
+    sa = SeamCheck.seam(a)
+    sr = SeamCheck.seam(r)
+    # 12 October 2026 : a reference that already tiles (ratio under 1.6, e.g. a joint on the border) sets its own threshold,
+    # 1.3 times its ratio; a reference that does not tile keeps the absolute 1.3. FR : seuil relatif si la référence raccorde.
+    thr = {ax: limit * (sr["ratio_" + ax] if sr["ratio_" + ax] < 1.6 else 1.0) for ax in ("x", "y")}
+    half = lambda c: 0.5 if int(c) <= 1 else (int(c) // 2) / int(c)
+    L = {"type": "seam", "shift_x": half(cells[0]) if sa["ratio_x"] > max(limit, thr["x"]) else 0.0,
+         "shift_y": half(cells[1]) if sa["ratio_y"] > max(limit, thr["y"]) else 0.0, "width": width_px / r.shape[0],
+         "note": "tileable borders, cross-fade with the wrapped copy shifted by whole cells"}
+    report = {"before": {"seam": sa, "pearson": M.measure(a, r, v)["pearson"]}, "layer": L}
+    if L["shift_x"] == 0.0 and L["shift_y"] == 0.0:
+        report["applied"] = False
+        # 12 October 2026 : no seam layer; the live graph and FINAL_height.png go back to the recipe without it
+        lattice = {"type": "lattice", "cx": int(cells[0]), "cy": int(cells[1])}
+        EX.build_final(net_path, [lattice] + recipe, fin, r.shape[0])
+        json.dump(EX.light_recipe(recipe, os.path.join(out_root, "payloads")), open(os.path.join(out_root, "recipe_current.json"), "w"))
+    else:
+        lattice = {"type": "lattice", "cx": int(cells[0]), "cy": int(cells[1])}
+        b = EX.build_final(net_path, [lattice] + recipe + [L], fin, r.shape[0])
+        if not b.get("ok"):
+            raise SystemExit("seam build failed: " + str(b)[:1500])
+        t = load_gray(fin)
+        report.update({"applied": True, "build": b.get("result"), "after": {"seam": SeamCheck.seam(t), "pearson": M.measure(t, r, v)["pearson"]}})
+        json.dump(EX.light_recipe(recipe + [L], os.path.join(out_root, "payloads")), open(os.path.join(out_root, "recipe_current.json"), "w"))
+        os.makedirs(os.path.join(out_root, "checks"), exist_ok=True)
+        SeamCheck.sheet(t, os.path.join(out_root, "checks", "tile2x2_tileable.png"))
+    json.dump(report, open(os.path.join(out_root, "tileable.json"), "w"), indent=1, default=float)
+    return report
+
+
+if __name__ == "__main__":
+    rep = make_tileable(*sys.argv[1:4], valid_png=(sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None),
+                        width_px=float(sys.argv[5]) if len(sys.argv) > 5 else 4.0)
+    s = lambda d: {k: round(float(v), 3) for k, v in d["seam"].items() if k.startswith("ratio")}
+    print(json.dumps({"applied": rep["applied"], "before": s(rep["before"]), "pearson_before": round(rep["before"]["pearson"], 4),
+                      "after": s(rep["after"]) if rep.get("after") else None, "pearson_after": round(rep["after"]["pearson"], 4) if rep.get("after") else None}))
