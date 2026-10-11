@@ -1,0 +1,97 @@
+{
+ "video": "projects/IdentifyDemo/breakdown.mp4",
+ "frames": 6,
+ "duration_s": 6.0,
+ "height_candidates": [
+  {
+   "t": 2.0,
+   "frame": "projects/IdentifyDemo/identify/frames/f00003.png",
+   "score": 0.4222,
+   "box": [
+    0.2562,
+    0.0667,
+    0.7438,
+    0.9333
+   ]
+  },
+  {
+   "t": 3.0,
+   "frame": "projects/IdentifyDemo/identify/frames/f00004.png",
+   "score": 0.4222,
+   "box": [
+    0.2562,
+    0.0667,
+    0.7438,
+    0.9333
+   ]
+  },
+  {
+   "t": 4.0,
+   "frame": "projects/IdentifyDemo/identify/frames/f00005.png",
+   "score": 0.0384,
+   "box": [
+    0.2562,
+    0.0667,
+    0.7438,
+    0.9333
+   ]
+  },
+  {
+   "t": 5.0,
+   "frame": "projects/IdentifyDemo/identify/frames/f00006.png",
+   "score": 0.0384,
+   "box": [
+    0.2562,
+    0.0667,
+    0.7438,
+    0.9333
+   ]
+  },
+  {
+   "t": 0.0,
+   "frame": "projects/IdentifyDemo/identify/frames/f00001.png",
+   "score": 0.0323,
+   "box": [
+    0.0,
+    0.0,
+    0.2094,
+    0.4722
+   ]
+  },
+  {
+   "t": 1.0,
+   "frame": "projects/IdentifyDemo/identify/frames/f00002.png",
+   "score": 0.0323,
+   "box": [
+    0.0,
+    0.0,
+    0.2094,
+    0.4722
+   ]
+  }
+ ],
+ "basecolor_candidates": [
+  {
+   "t": 4.0,
+   "score": 0.1564
+  },
+  {
+   "t": 5.0,
+   "score": 0.1564
+  },
+  {
+   "t": 3.0,
+   "score": 0.0035
+  },
+  {
+   "t": 0.0,
+   "score": 0.0013
+  },
+  {
+   "t": 1.0,
+   "score": 0.0013
+  }
+ ],
+ "auto": true,
+ "contact_sheet": "projects/IdentifyDemo/identify/height_candidates.png"
+}

@@ -1,0 +1,115 @@
+{
+ "project": "zenray-height",
+ "updated": "11 October 2026, 16:40",
+ "goal": "Find the ultimate method to reproduce a reference height map layer by layer in Copernicus, build Copernicus2.md, deprecate old methods, reproduce Procedural Ceramic Wall Tiles height + base color, then secondary tests window, whitepaint, tile.",
+ "resume_from": "P1 deprecation + P3 reference prep running in main loop; P2 research parts by 4 background agents",
+ "phases": {
+  "P1_deprecate_methods": "in_progress",
+  "P2_copernicus2_dataset": "agents running + local COP help parse pending",
+  "P3_reference_prep": "in_progress",
+  "P4_method_search_16x4": "pending",
+  "P5_execute_winner_height": "pending",
+  "P6_base_color": "pending",
+  "P7_secondary_tests": "pending, only after P5 and P6",
+  "P8_skill_update_sync_checkpoint": "pending"
+ },
+ "subagents": [
+  {
+   "id": "a9840a94295146d85",
+   "task": "Substance Designer node reference",
+   "model": "sonnet",
+   "deliverable": "/Users/zenray/.claude/tmp/tmp-zenray-height/dataset/parts/05_substance_designer_nodes.md",
+   "transcript": "/Users/zenray/.claude/projects/-Users-zenray--claude-Memory1/3a9c2407-7dcc-4acd-baf2-90a94300e953/subagents/agent-a9840a94295146d85.jsonl"
+  },
+  {
+   "id": "a30145bc0fb1a513e",
+   "task": "Substance Painter + Javier Perez + pro techniques",
+   "model": "sonnet",
+   "deliverable": "/Users/zenray/.claude/tmp/tmp-zenray-height/dataset/parts/06_painter_perez_pro_techniques.md",
+   "transcript": "/Users/zenray/.claude/projects/-Users-zenray--claude-Memory1/3a9c2407-7dcc-4acd-baf2-90a94300e953/subagents/agent-a30145bc0fb1a513e.jsonl"
+  },
+  {
+   "id": "ae649ce7dcad97197",
+   "task": "State of the art inverse procedural methods + metrics + 16 methods",
+   "model": "inherit",
+   "deliverable": "/Users/zenray/.claude/tmp/tmp-zenray-height/dataset/parts/08_state_of_the_art_methods.md",
+   "transcript": "/Users/zenray/.claude/projects/-Users-zenray--claude-Memory1/3a9c2407-7dcc-4acd-baf2-90a94300e953/subagents/agent-ae649ce7dcad97197.jsonl"
+  },
+  {
+   "id": "a0dd46d10ee3a816a",
+   "task": "Material families height recipes catalog",
+   "model": "inherit",
+   "deliverable": "/Users/zenray/.claude/tmp/tmp-zenray-height/dataset/parts/12_material_families_catalog.md",
+   "transcript": "/Users/zenray/.claude/projects/-Users-zenray--claude-Memory1/3a9c2407-7dcc-4acd-baf2-90a94300e953/subagents/agent-a0dd46d10ee3a816a.jsonl"
+  }
+ ],
+ "resume_11_October_2026": {
+  "done": "CeramicWallTiles_L2 executed layer by layer (12 layers, pearson 0.957, composite 0.890); EvolutionBoard built; SeamCheck shows a tiling seam (wrap ratio 11 vs ref 1.45) caused by per tile structure layers stepping on the joint centre.",
+  "fix_written_not_tested": "Recipe.py _fade + Execute.py FADED/joint_fade (fade measured from joint profile, about 0.0195 cell).",
+  "next": [
+   "Matthieu: validate method v1 and decide on L3",
+   "optional: derived maps (normal, AO, roughness) and HDA interface (8 parameters per category)",
+   "optional: finish catalog groups after I"
+  ],
+  "command_next": "cd /Users/zenray/.claude/tmp/tmp-zenray-height && /Users/zenray/.venvs/shorts/bin/python -I Scripts/Execute.py CeramicWallTiles_L2b /obj/ZRH_CeramicWallTiles refs/derived/ref_height_4x4_2048.png refs/derived/ref_height_valid_2048.png",
+  "status": "DONE (11 October 2026): L2c seamless 0.956, L3 0.978 awaiting approval, BC deltaE 7.70, window 0.901, whitepaint 0.942, tile 0.967, Copernicus2.md section 14, skill updated and synced."
+ },
+ "resume_12_October_2026": {
+  "status": "DONE (12 October 2026): four heights >= 0.99 Pearson at full resolution, tileable",
+  "finals": {
+   "ceramic": {
+    "pearson_full": 0.9976,
+    "ssim_full": 0.9753,
+    "dir": "versions/final/CeramicWallTiles_F2",
+    "valid_mask": "refs/derived/ref_height_valid2_2048.png"
+   },
+   "window": {
+    "pearson_full": 0.9914,
+    "ssim_full": 0.9472,
+    "mae": 0.0185,
+    "seam_xy": [
+     1.23,
+     0.87
+    ],
+    "ref_seam_xy": [
+     5.6,
+     0.92
+    ],
+    "dir": "versions/final/Secondary_window_EQ"
+   },
+   "whitepaint": {
+    "pearson_full": 0.992,
+    "ssim_full": 0.9435,
+    "mae": 0.0129,
+    "seam_xy": [
+     1.05,
+     1.14
+    ],
+    "ref_seam_xy": [
+     4.2,
+     4.07
+    ],
+    "dir": "versions/final/Secondary_whitepaint_L6"
+   },
+   "tile": {
+    "pearson_full": 0.9978,
+    "ssim_full": 0.9591,
+    "mae": 0.0116,
+    "seam_xy": [
+     0.01,
+     0.0
+    ],
+    "ref_seam_xy": [
+     0.04,
+     0.18
+    ],
+    "dir": "versions/final/Secondary_tile_L5"
+   }
+  },
+  "next": [
+   "Matthieu judges by eye",
+   "base colour to the same standard (MeasureColor at full resolution)",
+   "derived maps and HDA interface"
+  ]
+ }
+}

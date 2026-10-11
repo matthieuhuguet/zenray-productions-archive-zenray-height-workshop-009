@@ -1,0 +1,38 @@
+{
+ "video": "refs/source/ProceduralCeramicWallTiles_litvideo.mp4",
+ "frames": 5,
+ "duration_s": 5.0,
+ "height_candidates": [
+  {
+   "t": 0.0,
+   "frame": "projects/IdentifyTest/frames/f00001.png",
+   "score": 0.0306,
+   "box": [
+    0.0,
+    0.0,
+    0.2391,
+    0.5
+   ]
+  }
+ ],
+ "basecolor_candidates": [
+  {
+   "t": 2.0,
+   "score": 0.669
+  },
+  {
+   "t": 1.0,
+   "score": 0.4985
+  },
+  {
+   "t": 4.0,
+   "score": 0.4591
+  },
+  {
+   "t": 3.0,
+   "score": 0.2738
+  }
+ ],
+ "auto": false,
+ "contact_sheet": "projects/IdentifyTest/height_candidates.png"
+}
