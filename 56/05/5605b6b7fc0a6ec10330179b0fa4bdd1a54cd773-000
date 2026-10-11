@@ -1,0 +1,1507 @@
+{
+ "name": "CeramicWallTiles_F1",
+ "net": "/obj/ZRH_CeramicWallTiles_L3",
+ "reference": "refs/derived/ref_height_4x4_2048.png",
+ "layers": [
+  {
+   "local": null,
+   "layer": "joint_profile",
+   "status": "accepted",
+   "score": 0.46,
+   "gain": null,
+   "summary": {
+    "pearson": 0.3938,
+    "mae": 0.0857,
+    "low32": 0.149,
+    "b1-2": 0.1828,
+    "b4-8": 0.6032,
+    "b16-32": 0.5417,
+    "q25": 0.0,
+    "q75": 0.152,
+    "lines": 0.033,
+    "struct": 0.241,
+    "detail": 0.307
+   },
+   "note": "measured joint profile",
+   "seconds": 6.3,
+   "nodes": 16,
+   "timing": {
+    "kept_layers": 0,
+    "new_layers": 1,
+    "t_nodes": 0.16,
+    "t_cook_export": 1.17
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L01_joint_profile.png",
+   "gates": {
+    "A_thumb64_mae_pct": 12.879,
+    "D_joint_profile_corr": 0.9946,
+    "D_joint_profile_mae_pct": 1.162,
+    "G_band_energy_ratio": {
+     "1-2": 0.203,
+     "2-4": 0.426,
+     "4-8": 0.567,
+     "8-16": 0.536,
+     "16-32": 0.487
+    },
+    "F_residual_w1_pct": 2.715,
+    "F_residual_std_ratio": 0.156,
+    "J_rmse": 0.1091,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 973868,
+    "before": 0.0862,
+    "after": 0.0817,
+    "ls_gain": 1.181
+   },
+   "layer": "side_profiles",
+   "status": "accepted",
+   "score": 0.4736,
+   "gain": 0.0136,
+   "summary": {
+    "pearson": 0.4162,
+    "mae": 0.0846,
+    "low32": 0.239,
+    "b1-2": 0.2217,
+    "b4-8": 0.6169,
+    "b16-32": 0.5368,
+    "q25": 0.0209,
+    "q75": 0.1701,
+    "lines": 0.005,
+    "struct": 0.266,
+    "detail": 0.321
+   },
+   "note": "per side joint profiles",
+   "seconds": 5.2,
+   "nodes": 27,
+   "timing": {
+    "kept_layers": 1,
+    "new_layers": 1,
+    "t_nodes": 0.02,
+    "t_cook_export": 0.11
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L02_side_profiles.png",
+   "gates": {
+    "A_thumb64_mae_pct": 12.706,
+    "D_joint_profile_corr": 0.9991,
+    "D_joint_profile_mae_pct": 0.643,
+    "G_band_energy_ratio": {
+     "1-2": 0.222,
+     "2-4": 0.434,
+     "4-8": 0.599,
+     "8-16": 0.584,
+     "16-32": 0.537
+    },
+    "F_residual_w1_pct": 2.672,
+    "F_residual_std_ratio": 0.174,
+    "J_rmse": 0.1079,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 4035632,
+    "before": 0.0853,
+    "after": 0.0745,
+    "ls_gain": 0.896
+   },
+   "layer": "row_table",
+   "status": "accepted",
+   "score": 0.5737,
+   "gain": 0.1001,
+   "summary": {
+    "pearson": 0.6232,
+    "mae": 0.0741,
+    "low32": 0.734,
+    "b1-2": 0.2174,
+    "b4-8": 0.6101,
+    "b16-32": 0.5505,
+    "q25": 0.2045,
+    "q75": 0.4164,
+    "lines": 0.023,
+    "struct": 0.465,
+    "detail": 0.32
+   },
+   "note": "per row offset",
+   "seconds": 5.0,
+   "nodes": 30,
+   "timing": {
+    "kept_layers": 2,
+    "new_layers": 1,
+    "t_nodes": 0.0,
+    "t_cook_export": 0.13
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L03_row_table.png",
+   "gates": {
+    "A_thumb64_mae_pct": 10.398,
+    "D_joint_profile_corr": 0.999,
+    "D_joint_profile_mae_pct": 0.715,
+    "G_band_energy_ratio": {
+     "1-2": 0.229,
+     "2-4": 0.449,
+     "4-8": 0.618,
+     "8-16": 0.608,
+     "16-32": 0.571
+    },
+    "F_residual_w1_pct": 2.67,
+    "F_residual_std_ratio": 0.18,
+    "J_rmse": 0.0928,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 3252244,
+    "before": 0.0775,
+    "after": 0.0711,
+    "ls_gain": 0.774
+   },
+   "layer": "row_plane",
+   "status": "accepted",
+   "score": 0.6107,
+   "gain": 0.037,
+   "summary": {
+    "pearson": 0.6877,
+    "mae": 0.069,
+    "low32": 0.854,
+    "b1-2": 0.2091,
+    "b4-8": 0.6036,
+    "b16-32": 0.5283,
+    "q25": 0.3731,
+    "q75": 0.4301,
+    "lines": 0.013,
+    "struct": 0.54,
+    "detail": 0.312
+   },
+   "note": "per row plane",
+   "seconds": 4.9,
+   "nodes": 39,
+   "timing": {
+    "kept_layers": 3,
+    "new_layers": 1,
+    "t_nodes": 0.0,
+    "t_cook_export": 0.15
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L04_row_plane.png",
+   "gates": {
+    "A_thumb64_mae_pct": 9.042,
+    "D_joint_profile_corr": 0.9992,
+    "D_joint_profile_mae_pct": 0.573,
+    "G_band_energy_ratio": {
+     "1-2": 0.231,
+     "2-4": 0.448,
+     "4-8": 0.623,
+     "8-16": 0.646,
+     "16-32": 0.676
+    },
+    "F_residual_w1_pct": 2.671,
+    "F_residual_std_ratio": 0.181,
+    "J_rmse": 0.0866,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 842212,
+    "before": 0.0822,
+    "after": 0.0795,
+    "ls_gain": 0.99,
+    "refit": true
+   },
+   "layer": "corners",
+   "status": "accepted",
+   "score": 0.6141,
+   "gain": 0.0034,
+   "summary": {
+    "pearson": 0.6925,
+    "mae": 0.0683,
+    "low32": 0.862,
+    "b1-2": 0.2089,
+    "b4-8": 0.603,
+    "b16-32": 0.5256,
+    "q25": 0.3706,
+    "q75": 0.4317,
+    "lines": 0.013,
+    "struct": 0.545,
+    "detail": 0.312
+   },
+   "note": "per row bilinear corners",
+   "seconds": 5.2,
+   "nodes": 60,
+   "timing": {
+    "kept_layers": 4,
+    "new_layers": 1,
+    "t_nodes": 0.01,
+    "t_cook_export": 0.13
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L05_corners.png",
+   "gates": {
+    "A_thumb64_mae_pct": 8.918,
+    "D_joint_profile_corr": 0.9992,
+    "D_joint_profile_mae_pct": 0.573,
+    "G_band_energy_ratio": {
+     "1-2": 0.231,
+     "2-4": 0.449,
+     "4-8": 0.624,
+     "8-16": 0.65,
+     "16-32": 0.684
+    },
+    "F_residual_w1_pct": 2.67,
+    "F_residual_std_ratio": 0.182,
+    "J_rmse": 0.0861,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 3196739,
+    "before": 0.0727,
+    "after": 0.0557,
+    "ls_gain": 1.56
+   },
+   "layer": "regions_s32",
+   "status": "accepted",
+   "score": 0.6928,
+   "gain": 0.0787,
+   "summary": {
+    "pearson": 0.8082,
+    "mae": 0.0551,
+    "low32": 0.981,
+    "b1-2": 0.209,
+    "b4-8": 0.6064,
+    "b16-32": 0.7001,
+    "q25": 0.4515,
+    "q75": 0.5366,
+    "lines": 0.013,
+    "struct": 0.712,
+    "detail": 0.313
+   },
+   "note": "8 posterised bins of residual low pass s32 at 512 px, 371 regions",
+   "seconds": 5.6,
+   "nodes": 65,
+   "timing": {
+    "kept_layers": 5,
+    "new_layers": 1,
+    "t_nodes": 0.05,
+    "t_cook_export": 0.23
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L06_regions_s32.png",
+   "gates": {
+    "A_thumb64_mae_pct": 5.511,
+    "D_joint_profile_corr": 0.9991,
+    "D_joint_profile_mae_pct": 0.574,
+    "G_band_energy_ratio": {
+     "1-2": 0.231,
+     "2-4": 0.449,
+     "4-8": 0.624,
+     "8-16": 0.652,
+     "16-32": 0.7
+    },
+    "F_residual_w1_pct": 2.67,
+    "F_residual_std_ratio": 0.182,
+    "J_rmse": 0.0699,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 2716930,
+    "before": 0.0609,
+    "after": 0.0471,
+    "ls_gain": 1.849
+   },
+   "layer": "regions_s16",
+   "status": "accepted",
+   "score": 0.7453,
+   "gain": 0.0525,
+   "summary": {
+    "pearson": 0.869,
+    "mae": 0.0457,
+    "low32": 0.997,
+    "b1-2": 0.2106,
+    "b4-8": 0.6358,
+    "b16-32": 0.9131,
+    "q25": 0.5347,
+    "q75": 0.6104,
+    "lines": 0.013,
+    "struct": 0.807,
+    "detail": 0.322
+   },
+   "note": "8 posterised bins of residual low pass s16 at 512 px, 3478 regions",
+   "seconds": 5.8,
+   "nodes": 70,
+   "timing": {
+    "kept_layers": 6,
+    "new_layers": 1,
+    "t_nodes": 0.14,
+    "t_cook_export": 0.28
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L07_regions_s16.png",
+   "gates": {
+    "A_thumb64_mae_pct": 3.107,
+    "D_joint_profile_corr": 0.999,
+    "D_joint_profile_mae_pct": 0.524,
+    "G_band_energy_ratio": {
+     "1-2": 0.232,
+     "2-4": 0.449,
+     "4-8": 0.628,
+     "8-16": 0.678,
+     "16-32": 0.805
+    },
+    "F_residual_w1_pct": 2.667,
+    "F_residual_std_ratio": 0.182,
+    "J_rmse": 0.0588,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 2512882,
+    "before": 0.053,
+    "after": 0.0393,
+    "ls_gain": 1.902
+   },
+   "layer": "regions_s8",
+   "status": "accepted",
+   "score": 0.7918,
+   "gain": 0.0464,
+   "summary": {
+    "pearson": 0.9131,
+    "mae": 0.037,
+    "low32": 0.998,
+    "b1-2": 0.2268,
+    "b4-8": 0.7611,
+    "b16-32": 0.9818,
+    "q25": 0.6026,
+    "q75": 0.6913,
+    "lines": 0.014,
+    "struct": 0.853,
+    "detail": 0.371
+   },
+   "note": "8 posterised bins of residual low pass s8 at 1024 px, 11511 regions",
+   "seconds": 6.7,
+   "nodes": 75,
+   "timing": {
+    "kept_layers": 7,
+    "new_layers": 1,
+    "t_nodes": 0.44,
+    "t_cook_export": 0.28
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L08_regions_s8.png",
+   "gates": {
+    "A_thumb64_mae_pct": 1.468,
+    "D_joint_profile_corr": 0.9993,
+    "D_joint_profile_mae_pct": 0.449,
+    "G_band_energy_ratio": {
+     "1-2": 0.235,
+     "2-4": 0.462,
+     "4-8": 0.669,
+     "8-16": 0.794,
+     "16-32": 0.92
+    },
+    "F_residual_w1_pct": 2.635,
+    "F_residual_std_ratio": 0.184,
+    "J_rmse": 0.0485,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 152124,
+    "before": 0.0656,
+    "after": 0.0431,
+    "ls_gain": 0.956,
+    "refit": true
+   },
+   "layer": "lines",
+   "status": "accepted",
+   "score": 0.8084,
+   "gain": 0.0167,
+   "summary": {
+    "pearson": 0.9175,
+    "mae": 0.0361,
+    "low32": 0.998,
+    "b1-2": 0.4138,
+    "b4-8": 0.7724,
+    "b16-32": 0.9815,
+    "q25": 0.6084,
+    "q75": 0.7004,
+    "lines": 0.071,
+    "struct": 0.856,
+    "detail": 0.451
+   },
+   "note": "traced ridge centrelines (5209)",
+   "seconds": 14.7,
+   "nodes": 82,
+   "timing": {
+    "kept_layers": 8,
+    "new_layers": 1,
+    "t_nodes": 0.1,
+    "t_cook_export": 0.35
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L09_lines.png",
+   "gates": {
+    "A_thumb64_mae_pct": 1.522,
+    "D_joint_profile_corr": 0.9994,
+    "D_joint_profile_mae_pct": 0.499,
+    "G_band_energy_ratio": {
+     "1-2": 0.323,
+     "2-4": 0.476,
+     "4-8": 0.674,
+     "8-16": 0.797,
+     "16-32": 0.919
+    },
+    "F_residual_w1_pct": 2.281,
+    "F_residual_std_ratio": 0.426,
+    "J_rmse": 0.0474,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 112818,
+    "before": 0.1129,
+    "after": 0.0483,
+    "ls_gain": 1.355
+   },
+   "layer": "blobs",
+   "status": "accepted",
+   "score": 0.8306,
+   "gain": 0.0221,
+   "summary": {
+    "pearson": 0.9306,
+    "mae": 0.0343,
+    "low32": 0.998,
+    "b1-2": 0.5336,
+    "b4-8": 0.8235,
+    "b16-32": 0.9816,
+    "q25": 0.6211,
+    "q75": 0.7174,
+    "lines": 0.187,
+    "struct": 0.862,
+    "detail": 0.555
+   },
+   "note": "2521 compact blobs of high pass s6 beyond quantile 0.985",
+   "seconds": 6.3,
+   "nodes": 87,
+   "timing": {
+    "kept_layers": 9,
+    "new_layers": 1,
+    "t_nodes": 0.07,
+    "t_cook_export": 0.41
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L10_blobs.png",
+   "gates": {
+    "A_thumb64_mae_pct": 1.517,
+    "D_joint_profile_corr": 0.9995,
+    "D_joint_profile_mae_pct": 0.54,
+    "G_band_energy_ratio": {
+     "1-2": 0.456,
+     "2-4": 0.545,
+     "4-8": 0.691,
+     "8-16": 0.801,
+     "16-32": 0.916
+    },
+    "F_residual_w1_pct": 2.074,
+    "F_residual_std_ratio": 0.546,
+    "J_rmse": 0.0438,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 1954717,
+    "before": 0.044,
+    "after": 0.029,
+    "ls_gain": 1.907
+   },
+   "layer": "regions_s4",
+   "status": "accepted",
+   "score": 0.8699,
+   "gain": 0.0394,
+   "summary": {
+    "pearson": 0.9571,
+    "mae": 0.0264,
+    "low32": 0.999,
+    "b1-2": 0.5748,
+    "b4-8": 0.9384,
+    "b16-32": 0.9917,
+    "q25": 0.703,
+    "q75": 0.7798,
+    "lines": 0.201,
+    "struct": 0.894,
+    "detail": 0.626
+   },
+   "note": "8 posterised bins of residual low pass s4 at 1024 px, 31661 regions",
+   "seconds": 8.0,
+   "nodes": 92,
+   "timing": {
+    "kept_layers": 10,
+    "new_layers": 1,
+    "t_nodes": 0.75,
+    "t_cook_export": 0.58
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L11_regions_s4.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.791,
+    "D_joint_profile_corr": 0.9996,
+    "D_joint_profile_mae_pct": 0.308,
+    "G_band_energy_ratio": {
+     "1-2": 0.475,
+     "2-4": 0.61,
+     "4-8": 0.805,
+     "8-16": 0.915,
+     "16-32": 0.968
+    },
+    "F_residual_w1_pct": 1.99,
+    "F_residual_std_ratio": 0.556,
+    "J_rmse": 0.0346,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s8_p2",
+   "status": "accepted",
+   "score": 0.8724,
+   "gain": 0.0025,
+   "summary": {
+    "pearson": 0.9589,
+    "mae": 0.0258,
+    "low32": 0.999,
+    "b1-2": 0.5754,
+    "b4-8": 0.9439,
+    "b16-32": 0.9927,
+    "q25": 0.7119,
+    "q75": 0.7846,
+    "lines": 0.202,
+    "struct": 0.897,
+    "detail": 0.628
+   },
+   "note": "8 posterised bins of residual low pass s8 at 1024 px, 23446 regions",
+   "seconds": 7.9,
+   "nodes": 97,
+   "timing": {
+    "kept_layers": 11,
+    "new_layers": 1,
+    "t_nodes": 0.78,
+    "t_cook_export": 0.58
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L12_regions_s8_p2.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.672,
+    "D_joint_profile_corr": 0.9996,
+    "D_joint_profile_mae_pct": 0.286,
+    "G_band_energy_ratio": {
+     "1-2": 0.477,
+     "2-4": 0.621,
+     "4-8": 0.829,
+     "8-16": 0.94,
+     "16-32": 0.978
+    },
+    "F_residual_w1_pct": 1.978,
+    "F_residual_std_ratio": 0.557,
+    "J_rmse": 0.0338,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 952508,
+    "before": 0.0379,
+    "after": 0.0291,
+    "ls_gain": 2.809
+   },
+   "layer": "regions_s4_p2",
+   "status": "accepted",
+   "score": 0.8889,
+   "gain": 0.0165,
+   "summary": {
+    "pearson": 0.9672,
+    "mae": 0.0227,
+    "low32": 0.999,
+    "b1-2": 0.6152,
+    "b4-8": 0.9706,
+    "b16-32": 0.9935,
+    "q25": 0.7429,
+    "q75": 0.8104,
+    "lines": 0.217,
+    "struct": 0.908,
+    "detail": 0.664
+   },
+   "note": "8 posterised bins of residual low pass s4 at 2048 px, 76017 regions",
+   "seconds": 13.6,
+   "nodes": 102,
+   "timing": {
+    "kept_layers": 12,
+    "new_layers": 1,
+    "t_nodes": 2.62,
+    "t_cook_export": 0.61
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L13_regions_s4_p2.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.546,
+    "D_joint_profile_corr": 0.9997,
+    "D_joint_profile_mae_pct": 0.253,
+    "G_band_energy_ratio": {
+     "1-2": 0.502,
+     "2-4": 0.685,
+     "4-8": 0.893,
+     "8-16": 0.967,
+     "16-32": 0.985
+    },
+    "F_residual_w1_pct": 1.895,
+    "F_residual_std_ratio": 0.571,
+    "J_rmse": 0.0302,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 84451,
+    "before": 0.0443,
+    "after": 0.0299,
+    "ls_gain": 0.91,
+    "refit": true
+   },
+   "layer": "lines_p2",
+   "status": "accepted",
+   "score": 0.8925,
+   "gain": 0.0037,
+   "summary": {
+    "pearson": 0.9682,
+    "mae": 0.0224,
+    "low32": 0.999,
+    "b1-2": 0.6465,
+    "b4-8": 0.971,
+    "b16-32": 0.9935,
+    "q25": 0.7453,
+    "q75": 0.8138,
+    "lines": 0.237,
+    "struct": 0.91,
+    "detail": 0.679
+   },
+   "note": "traced ridge centrelines (6721)",
+   "seconds": 11.5,
+   "nodes": 109,
+   "timing": {
+    "kept_layers": 13,
+    "new_layers": 1,
+    "t_nodes": 0.11,
+    "t_cook_export": 0.55
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L14_lines_p2.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.58,
+    "D_joint_profile_corr": 0.9997,
+    "D_joint_profile_mae_pct": 0.272,
+    "G_band_energy_ratio": {
+     "1-2": 0.523,
+     "2-4": 0.694,
+     "4-8": 0.897,
+     "8-16": 0.968,
+     "16-32": 0.985
+    },
+    "F_residual_w1_pct": 1.811,
+    "F_residual_std_ratio": 0.615,
+    "J_rmse": 0.0298,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 11560,
+    "before": 0.0848,
+    "after": 0.0326,
+    "ls_gain": 1.447
+   },
+   "layer": "blobs_p2",
+   "status": "accepted",
+   "score": 0.8942,
+   "gain": 0.0017,
+   "summary": {
+    "pearson": 0.9689,
+    "mae": 0.0222,
+    "low32": 0.999,
+    "b1-2": 0.6597,
+    "b4-8": 0.9713,
+    "b16-32": 0.9935,
+    "q25": 0.7467,
+    "q75": 0.8154,
+    "lines": 0.246,
+    "struct": 0.91,
+    "detail": 0.685
+   },
+   "note": "647 compact blobs of high pass s3 beyond quantile 0.985",
+   "seconds": 5.6,
+   "nodes": 114,
+   "timing": {
+    "kept_layers": 14,
+    "new_layers": 1,
+    "t_nodes": 0.02,
+    "t_cook_export": 0.6
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L15_blobs_p2.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.583,
+    "D_joint_profile_corr": 0.9997,
+    "D_joint_profile_mae_pct": 0.274,
+    "G_band_energy_ratio": {
+     "1-2": 0.532,
+     "2-4": 0.698,
+     "4-8": 0.897,
+     "8-16": 0.967,
+     "16-32": 0.984
+    },
+    "F_residual_w1_pct": 1.794,
+    "F_residual_std_ratio": 0.622,
+    "J_rmse": 0.0294,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s4_p3",
+   "status": "accepted",
+   "score": 0.9026,
+   "gain": 0.0083,
+   "summary": {
+    "pearson": 0.9727,
+    "mae": 0.0206,
+    "low32": 0.999,
+    "b1-2": 0.6808,
+    "b4-8": 0.9807,
+    "b16-32": 0.9939,
+    "q25": 0.765,
+    "q75": 0.8265,
+    "lines": 0.258,
+    "struct": 0.916,
+    "detail": 0.703
+   },
+   "note": "8 posterised bins of residual low pass s4 at 2048 px, 90193 regions",
+   "seconds": 13.9,
+   "nodes": 119,
+   "timing": {
+    "kept_layers": 15,
+    "new_layers": 1,
+    "t_nodes": 2.75,
+    "t_cook_export": 0.8
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L16_regions_s4_p3.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.482,
+    "D_joint_profile_corr": 0.9997,
+    "D_joint_profile_mae_pct": 0.232,
+    "G_band_energy_ratio": {
+     "1-2": 0.553,
+     "2-4": 0.742,
+     "4-8": 0.929,
+     "8-16": 0.978,
+     "16-32": 0.989
+    },
+    "F_residual_w1_pct": 1.726,
+    "F_residual_std_ratio": 0.634,
+    "J_rmse": 0.0276,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s4_p4",
+   "status": "accepted",
+   "score": 0.9076,
+   "gain": 0.0051,
+   "summary": {
+    "pearson": 0.9749,
+    "mae": 0.0197,
+    "low32": 0.999,
+    "b1-2": 0.6954,
+    "b4-8": 0.9848,
+    "b16-32": 0.994,
+    "q25": 0.7751,
+    "q75": 0.8334,
+    "lines": 0.268,
+    "struct": 0.92,
+    "detail": 0.714
+   },
+   "note": "8 posterised bins of residual low pass s4 at 2048 px, 103778 regions",
+   "seconds": 14.1,
+   "nodes": 124,
+   "timing": {
+    "kept_layers": 16,
+    "new_layers": 1,
+    "t_nodes": 2.73,
+    "t_cook_export": 0.98
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L17_regions_s4_p4.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.447,
+    "D_joint_profile_corr": 0.9997,
+    "D_joint_profile_mae_pct": 0.221,
+    "G_band_energy_ratio": {
+     "1-2": 0.57,
+     "2-4": 0.774,
+     "4-8": 0.946,
+     "8-16": 0.983,
+     "16-32": 0.991
+    },
+    "F_residual_w1_pct": 1.675,
+    "F_residual_std_ratio": 0.644,
+    "J_rmse": 0.0265,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s4_p5",
+   "status": "accepted",
+   "score": 0.9112,
+   "gain": 0.0036,
+   "summary": {
+    "pearson": 0.9763,
+    "mae": 0.0191,
+    "low32": 0.999,
+    "b1-2": 0.7063,
+    "b4-8": 0.9871,
+    "b16-32": 0.9942,
+    "q25": 0.7819,
+    "q75": 0.8386,
+    "lines": 0.276,
+    "struct": 0.922,
+    "detail": 0.722
+   },
+   "note": "8 posterised bins of residual low pass s4 at 2048 px, 112636 regions",
+   "seconds": 14.4,
+   "nodes": 129,
+   "timing": {
+    "kept_layers": 17,
+    "new_layers": 1,
+    "t_nodes": 2.98,
+    "t_cook_export": 1.02
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L18_regions_s4_p5.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.424,
+    "D_joint_profile_corr": 0.9998,
+    "D_joint_profile_mae_pct": 0.215,
+    "G_band_energy_ratio": {
+     "1-2": 0.585,
+     "2-4": 0.799,
+     "4-8": 0.958,
+     "8-16": 0.987,
+     "16-32": 0.993
+    },
+    "F_residual_w1_pct": 1.633,
+    "F_residual_std_ratio": 0.653,
+    "J_rmse": 0.0257,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s4_p6",
+   "status": "accepted",
+   "score": 0.9139,
+   "gain": 0.0027,
+   "summary": {
+    "pearson": 0.9773,
+    "mae": 0.0186,
+    "low32": 0.999,
+    "b1-2": 0.7149,
+    "b4-8": 0.9885,
+    "b16-32": 0.9943,
+    "q25": 0.7869,
+    "q75": 0.8426,
+    "lines": 0.283,
+    "struct": 0.924,
+    "detail": 0.728
+   },
+   "note": "8 posterised bins of residual low pass s4 at 2048 px, 118892 regions",
+   "seconds": 14.5,
+   "nodes": 134,
+   "timing": {
+    "kept_layers": 18,
+    "new_layers": 1,
+    "t_nodes": 3.07,
+    "t_cook_export": 0.94
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L19_regions_s4_p6.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.408,
+    "D_joint_profile_corr": 0.9998,
+    "D_joint_profile_mae_pct": 0.212,
+    "G_band_energy_ratio": {
+     "1-2": 0.597,
+     "2-4": 0.818,
+     "4-8": 0.965,
+     "8-16": 0.989,
+     "16-32": 0.994
+    },
+    "F_residual_w1_pct": 1.598,
+    "F_residual_std_ratio": 0.661,
+    "J_rmse": 0.0252,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s4_p7",
+   "status": "accepted",
+   "score": 0.916,
+   "gain": 0.0021,
+   "summary": {
+    "pearson": 0.9781,
+    "mae": 0.0182,
+    "low32": 0.999,
+    "b1-2": 0.7221,
+    "b4-8": 0.9894,
+    "b16-32": 0.9944,
+    "q25": 0.7909,
+    "q75": 0.8456,
+    "lines": 0.289,
+    "struct": 0.925,
+    "detail": 0.733
+   },
+   "note": "8 posterised bins of residual low pass s4 at 2048 px, 123854 regions",
+   "seconds": 15.6,
+   "nodes": 139,
+   "timing": {
+    "kept_layers": 19,
+    "new_layers": 1,
+    "t_nodes": 3.33,
+    "t_cook_export": 1.26
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L20_regions_s4_p7.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.396,
+    "D_joint_profile_corr": 0.9998,
+    "D_joint_profile_mae_pct": 0.21,
+    "G_band_energy_ratio": {
+     "1-2": 0.608,
+     "2-4": 0.833,
+     "4-8": 0.97,
+     "8-16": 0.99,
+     "16-32": 0.994
+    },
+    "F_residual_w1_pct": 1.568,
+    "F_residual_std_ratio": 0.667,
+    "J_rmse": 0.0247,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s4_p8",
+   "status": "accepted",
+   "score": 0.9178,
+   "gain": 0.0018,
+   "summary": {
+    "pearson": 0.9787,
+    "mae": 0.0179,
+    "low32": 0.999,
+    "b1-2": 0.7281,
+    "b4-8": 0.9901,
+    "b16-32": 0.9944,
+    "q25": 0.7941,
+    "q75": 0.848,
+    "lines": 0.294,
+    "struct": 0.926,
+    "detail": 0.738
+   },
+   "note": "8 posterised bins of residual low pass s4 at 2048 px, 128021 regions",
+   "seconds": 15.1,
+   "nodes": 144,
+   "timing": {
+    "kept_layers": 20,
+    "new_layers": 1,
+    "t_nodes": 3.19,
+    "t_cook_export": 1.16
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L21_regions_s4_p8.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.387,
+    "D_joint_profile_corr": 0.9998,
+    "D_joint_profile_mae_pct": 0.207,
+    "G_band_energy_ratio": {
+     "1-2": 0.618,
+     "2-4": 0.845,
+     "4-8": 0.974,
+     "8-16": 0.991,
+     "16-32": 0.995
+    },
+    "F_residual_w1_pct": 1.542,
+    "F_residual_std_ratio": 0.673,
+    "J_rmse": 0.0244,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 356431,
+    "before": 0.037,
+    "after": 0.0281,
+    "ls_gain": 3.478
+   },
+   "layer": "regions_s2",
+   "status": "accepted",
+   "score": 0.9336,
+   "gain": 0.0158,
+   "summary": {
+    "pearson": 0.9834,
+    "mae": 0.0155,
+    "low32": 0.999,
+    "b1-2": 0.8082,
+    "b4-8": 0.9923,
+    "b16-32": 0.9946,
+    "q25": 0.8197,
+    "q75": 0.8667,
+    "lines": 0.337,
+    "struct": 0.935,
+    "detail": 0.776
+   },
+   "note": "8 posterised bins of residual low pass s2 at 2048 px, 151535 regions",
+   "seconds": 15.7,
+   "nodes": 149,
+   "timing": {
+    "kept_layers": 21,
+    "new_layers": 1,
+    "t_nodes": 3.52,
+    "t_cook_export": 1.25
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L22_regions_s2.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.357,
+    "D_joint_profile_corr": 0.9998,
+    "D_joint_profile_mae_pct": 0.173,
+    "G_band_energy_ratio": {
+     "1-2": 0.673,
+     "2-4": 0.89,
+     "4-8": 0.981,
+     "8-16": 0.994,
+     "16-32": 0.997
+    },
+    "F_residual_w1_pct": 1.39,
+    "F_residual_std_ratio": 0.711,
+    "J_rmse": 0.0215,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s2_p2",
+   "status": "accepted",
+   "score": 0.9427,
+   "gain": 0.0091,
+   "summary": {
+    "pearson": 0.986,
+    "mae": 0.0141,
+    "low32": 0.999,
+    "b1-2": 0.851,
+    "b4-8": 0.9932,
+    "b16-32": 0.9948,
+    "q25": 0.8366,
+    "q75": 0.8775,
+    "lines": 0.366,
+    "struct": 0.941,
+    "detail": 0.797
+   },
+   "note": "8 posterised bins of residual low pass s2 at 2048 px, 156629 regions",
+   "seconds": 15.9,
+   "nodes": 154,
+   "timing": {
+    "kept_layers": 22,
+    "new_layers": 1,
+    "t_nodes": 3.66,
+    "t_cook_export": 1.32
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L23_regions_s2_p2.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.337,
+    "D_joint_profile_corr": 0.9999,
+    "D_joint_profile_mae_pct": 0.153,
+    "G_band_energy_ratio": {
+     "1-2": 0.719,
+     "2-4": 0.92,
+     "4-8": 0.986,
+     "8-16": 0.996,
+     "16-32": 0.997
+    },
+    "F_residual_w1_pct": 1.261,
+    "F_residual_std_ratio": 0.744,
+    "J_rmse": 0.0198,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 1438,
+    "before": 0.0584,
+    "after": 0.0175,
+    "ls_gain": 1.312
+   },
+   "layer": "blobs_p3",
+   "status": "rejected",
+   "score": 0.9428,
+   "gain": 0.0001,
+   "summary": {
+    "pearson": 0.9861,
+    "mae": 0.0141,
+    "low32": 0.999,
+    "b1-2": 0.8512,
+    "b4-8": 0.9932,
+    "b16-32": 0.9948,
+    "q25": 0.8366,
+    "q75": 0.8777,
+    "lines": 0.367,
+    "struct": 0.941,
+    "detail": 0.798
+   },
+   "note": "156 compact blobs of high pass s2 beyond quantile 0.985",
+   "seconds": 6.1,
+   "nodes": 159,
+   "timing": {
+    "kept_layers": 23,
+    "new_layers": 1,
+    "t_nodes": 0.01,
+    "t_cook_export": 1.29
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 783330,
+    "before": 0.0292,
+    "after": 0.0181,
+    "ls_gain": 2.292
+   },
+   "layer": "regions_s1",
+   "status": "accepted",
+   "score": 0.9586,
+   "gain": 0.0159,
+   "summary": {
+    "pearson": 0.9904,
+    "mae": 0.0113,
+    "low32": 0.999,
+    "b1-2": 0.9218,
+    "b4-8": 0.9941,
+    "b16-32": 0.9949,
+    "q25": 0.8685,
+    "q75": 0.9001,
+    "lines": 0.424,
+    "struct": 0.952,
+    "detail": 0.832
+   },
+   "note": "8 posterised bins of residual low pass s1 at 2048 px, 162082 regions",
+   "seconds": 18.1,
+   "nodes": 159,
+   "timing": {
+    "kept_layers": 23,
+    "new_layers": 1,
+    "t_nodes": 3.53,
+    "t_cook_export": 1.44
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L24_regions_s1.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.327,
+    "D_joint_profile_corr": 0.9999,
+    "D_joint_profile_mae_pct": 0.12,
+    "G_band_energy_ratio": {
+     "1-2": 0.801,
+     "2-4": 0.955,
+     "4-8": 0.99,
+     "8-16": 0.998,
+     "16-32": 0.999
+    },
+    "F_residual_w1_pct": 1.013,
+    "F_residual_std_ratio": 0.809,
+    "J_rmse": 0.0164,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 30513,
+    "before": 0.0441,
+    "after": 0.0347,
+    "ls_gain": 4.325
+   },
+   "layer": "regions_s1_p2",
+   "status": "accepted",
+   "score": 0.9664,
+   "gain": 0.0078,
+   "summary": {
+    "pearson": 0.9924,
+    "mae": 0.0099,
+    "low32": 0.999,
+    "b1-2": 0.95,
+    "b4-8": 0.9946,
+    "b16-32": 0.995,
+    "q25": 0.8863,
+    "q75": 0.9116,
+    "lines": 0.47,
+    "struct": 0.958,
+    "detail": 0.852
+   },
+   "note": "8 posterised bins of residual low pass s1 at 2048 px, 167499 regions",
+   "seconds": 16.4,
+   "nodes": 164,
+   "timing": {
+    "kept_layers": 24,
+    "new_layers": 1,
+    "t_nodes": 3.53,
+    "t_cook_export": 1.37
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L25_regions_s1_p2.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.31,
+    "D_joint_profile_corr": 0.9999,
+    "D_joint_profile_mae_pct": 0.104,
+    "G_band_energy_ratio": {
+     "1-2": 0.85,
+     "2-4": 0.97,
+     "4-8": 0.991,
+     "8-16": 0.999,
+     "16-32": 1.0
+    },
+    "F_residual_w1_pct": 0.855,
+    "F_residual_std_ratio": 0.851,
+    "J_rmse": 0.0146,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s2_p3",
+   "status": "accepted",
+   "score": 0.9677,
+   "gain": 0.0013,
+   "summary": {
+    "pearson": 0.9928,
+    "mae": 0.0096,
+    "low32": 0.999,
+    "b1-2": 0.9538,
+    "b4-8": 0.9948,
+    "b16-32": 0.9951,
+    "q25": 0.8894,
+    "q75": 0.9136,
+    "lines": 0.48,
+    "struct": 0.959,
+    "detail": 0.856
+   },
+   "note": "8 posterised bins of residual low pass s2 at 2048 px, 158860 regions",
+   "seconds": 16.4,
+   "nodes": 169,
+   "timing": {
+    "kept_layers": 25,
+    "new_layers": 1,
+    "t_nodes": 3.84,
+    "t_cook_export": 1.57
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L26_regions_s2_p3.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.293,
+    "D_joint_profile_corr": 1.0,
+    "D_joint_profile_mae_pct": 0.1,
+    "G_band_energy_ratio": {
+     "1-2": 0.865,
+     "2-4": 0.976,
+     "4-8": 0.992,
+     "8-16": 1.0,
+     "16-32": 1.0
+    },
+    "F_residual_w1_pct": 0.813,
+    "F_residual_std_ratio": 0.863,
+    "J_rmse": 0.0143,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s1_p3",
+   "status": "accepted",
+   "score": 0.9716,
+   "gain": 0.0039,
+   "summary": {
+    "pearson": 0.9938,
+    "mae": 0.0088,
+    "low32": 0.999,
+    "b1-2": 0.9662,
+    "b4-8": 0.9949,
+    "b16-32": 0.9951,
+    "q25": 0.8989,
+    "q75": 0.9198,
+    "lines": 0.508,
+    "struct": 0.962,
+    "detail": 0.866
+   },
+   "note": "8 posterised bins of residual low pass s1 at 2048 px, 163671 regions",
+   "seconds": 16.5,
+   "nodes": 174,
+   "timing": {
+    "kept_layers": 26,
+    "new_layers": 1,
+    "t_nodes": 3.07,
+    "t_cook_export": 1.57
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L27_regions_s1_p3.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.294,
+    "D_joint_profile_corr": 1.0,
+    "D_joint_profile_mae_pct": 0.092,
+    "G_band_energy_ratio": {
+     "1-2": 0.892,
+     "2-4": 0.982,
+     "4-8": 0.992,
+     "8-16": 1.0,
+     "16-32": 1.001
+    },
+    "F_residual_w1_pct": 0.718,
+    "F_residual_std_ratio": 0.888,
+    "J_rmse": 0.0132,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": {
+    "ok": true,
+    "pixels": 0,
+    "ls_gain": 1.0
+   },
+   "layer": "regions_s1_p4",
+   "status": "accepted",
+   "score": 0.9742,
+   "gain": 0.0026,
+   "summary": {
+    "pearson": 0.9944,
+    "mae": 0.0082,
+    "low32": 0.999,
+    "b1-2": 0.9736,
+    "b4-8": 0.9951,
+    "b16-32": 0.9952,
+    "q25": 0.906,
+    "q75": 0.9244,
+    "lines": 0.527,
+    "struct": 0.964,
+    "detail": 0.873
+   },
+   "note": "8 posterised bins of residual low pass s1 at 2048 px, 159276 regions",
+   "seconds": 15.9,
+   "nodes": 179,
+   "timing": {
+    "kept_layers": 27,
+    "new_layers": 1,
+    "t_nodes": 3.21,
+    "t_cook_export": 1.44
+   },
+   "image": "/Users/zenray/.claude/tmp/tmp-zenray-height/versions/final/CeramicWallTiles_F1/L28_regions_s1_p4.png",
+   "gates": {
+    "A_thumb64_mae_pct": 0.289,
+    "D_joint_profile_corr": 1.0,
+    "D_joint_profile_mae_pct": 0.086,
+    "G_band_energy_ratio": {
+     "1-2": 0.911,
+     "2-4": 0.986,
+     "4-8": 0.993,
+     "8-16": 1.001,
+     "16-32": 1.001
+    },
+    "F_residual_w1_pct": 0.648,
+    "F_residual_std_ratio": 0.906,
+    "J_rmse": 0.0125,
+    "J_floor_if_stochastic": 0.0322
+   }
+  },
+  {
+   "local": null,
+   "layer": "hist",
+   "status": "rejected",
+   "score": 0.974,
+   "gain": -0.0002,
+   "summary": {
+    "pearson": 0.9941,
+    "mae": 0.0086,
+    "low32": 0.999,
+    "b1-2": 0.9732,
+    "b4-8": 0.9946,
+    "b16-32": 0.9947,
+    "q25": 0.9064,
+    "q75": 0.9249,
+    "lines": 0.517,
+    "struct": 0.964,
+    "detail": 0.87
+   },
+   "note": "histogram matched to reference",
+   "seconds": 6.1,
+   "nodes": 180,
+   "timing": {
+    "kept_layers": 28,
+    "new_layers": 1,
+    "t_nodes": 0.01,
+    "t_cook_export": 1.38
+   }
+  }
+ ],
+ "cells": [
+  4,
+  4
+ ],
+ "fade": 0.01953125
+}
